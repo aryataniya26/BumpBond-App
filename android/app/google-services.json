@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "505357596687",
+    "project_id": "ai-life-manager-b2556",
+    "storage_bucket": "ai-life-manager-b2556.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:505357596687:android:6b88eac69d4002152b4b7a",
+        "android_client_info": {
+          "package_name": "com.example.bump_bond_flutter_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "505357596687-32k0uj1bglhtf8hec0i03eihh9u8cn0j.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.bump_bond_flutter_app",
+            "certificate_hash": "55a15451a865dbbe82a6ab3af96cef0e214d3633"
+          }
+        },
+        {
+          "client_id": "505357596687-fqaqufvjedmn6r2t60la9juv2vk60ono.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvUmhRsISZjgy6zuaRby5Ayk-IWWGxAfE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "505357596687-fqaqufvjedmn6r2t60la9juv2vk60ono.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "505357596687-ij98po2cmo2dj8gr9p1kkht8br4gcdhh.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.bumpBondFlutterApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
