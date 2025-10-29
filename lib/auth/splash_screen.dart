@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:bump_bond_flutter_app/models/pregnancy_data.dart';
-import 'package:bump_bond_flutter_app/screens/onboarding_screen.dart';
+import 'package:bump_bond_flutter_app/auth/onboarding_screen.dart';
 import 'package:bump_bond_flutter_app/screens/due_date_setup_screen.dart';
 import 'package:bump_bond_flutter_app/main.dart';
 

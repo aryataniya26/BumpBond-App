@@ -1,4 +1,4 @@
-import 'package:bump_bond_flutter_app/screens/login_screen.dart';
+import 'package:bump_bond_flutter_app/auth/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

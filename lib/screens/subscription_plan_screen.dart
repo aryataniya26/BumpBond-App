@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-
 class SubscriptionPlansScreen extends StatefulWidget {
   const SubscriptionPlansScreen({Key? key}) : super(key: key);
 

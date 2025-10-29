@@ -1,13 +1,13 @@
 import 'dart:typed_data';
 import 'dart:convert';
-import 'package:bump_bond_flutter_app/screens/setting_screen.dart';
+import 'package:bump_bond_flutter_app/auth/setting_screen.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:bump_bond_flutter_app/screens/education_screen.dart';
-import 'package:bump_bond_flutter_app/screens/health_tracker_screen.dart';
+import 'package:bump_bond_flutter_app/auth/health_tracker_screen.dart';
 import 'package:bump_bond_flutter_app/screens/home_screen.dart';
 import 'package:bump_bond_flutter_app/screens/journal_screen.dart';
-import 'package:bump_bond_flutter_app/screens/splash_screen.dart';
+import 'package:bump_bond_flutter_app/auth/splash_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';

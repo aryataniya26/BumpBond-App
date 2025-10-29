@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bump_bond_flutter_app/services/auth_service.dart';
-import 'due_date_setup_screen.dart';
+import '../screens/due_date_setup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
