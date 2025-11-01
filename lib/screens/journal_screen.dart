@@ -21,7 +21,7 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
   late AnimationController _animationController;
   final ImagePicker _imagePicker = ImagePicker();
   final AudioRecorder _audioRecorder = AudioRecorder();
-  final AudiPlayer _audioPlayer = Audioplayers();
+  final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isRecording = false;
   bool _isPlaying = false;
   String? _currentPlayingId;

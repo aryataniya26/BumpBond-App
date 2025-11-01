@@ -19,7 +19,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   final List<Map<String, dynamic>> _messages = [
     {
       'type': 'ai',
-      'text': 'Hello mumma! 🌸 I\'m TinyTalk, your AI baby companion. How are you feeling today? 💕',
+      'text': 'Hello mumma! I\'m TinyTalk, your AI baby companion. How are you feeling today?',
       'emoji': '😊',
       'timestamp': DateTime.now(),
     }
@@ -31,6 +31,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
 
   bool _isSending = false;
   bool _isTyping = false;
+  bool _isSpeechEnabled = true;
 
   @override
   void initState() {
@@ -68,6 +69,26 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     }
   }
 
+  // Clean text by removing ALL emojis and special unicode characters
+  String _cleanTextForSpeech(String text) {
+    // Remove all emojis, symbols, and unicode characters
+    // Keep only: letters (English + other languages), numbers, spaces, and basic punctuation
+    String cleaned = text
+        .replaceAll(RegExp(r'[\u{1F300}-\u{1F9FF}]', unicode: true), '') // Emojis
+        .replaceAll(RegExp(r'[\u{2600}-\u{26FF}]', unicode: true), '')   // Misc symbols
+        .replaceAll(RegExp(r'[\u{2700}-\u{27BF}]', unicode: true), '')   // Dingbats
+        .replaceAll(RegExp(r'[\u{FE00}-\u{FE0F}]', unicode: true), '')   // Variation selectors
+        .replaceAll(RegExp(r'[\u{1F000}-\u{1F02F}]', unicode: true), '') // Mahjong tiles
+        .replaceAll(RegExp(r'[\u{1F0A0}-\u{1F0FF}]', unicode: true), '') // Playing cards
+        .replaceAll(RegExp(r'[\u{1F100}-\u{1F64F}]', unicode: true), '') // Enclosed characters
+        .replaceAll(RegExp(r'[\u{1F680}-\u{1F6FF}]', unicode: true), '') // Transport symbols
+        .replaceAll(RegExp(r'[\u{1F900}-\u{1F9FF}]', unicode: true), '') // Supplemental symbols
+        .replaceAll(RegExp(r'[🌸💖💕😊😢😴😄🎵🧠🌟💝]'), '')           // Common emojis
+        .trim();
+
+    return cleaned;
+  }
+
   void _sendMessage({String? text}) async {
     final input = text ?? _messageController.text.trim();
     if (input.isEmpty || _isSending) return;
@@ -84,15 +105,26 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
 
     _messageController.clear();
     _scrollToBottom();
+
     try {
-      // ✅ Better prompt for baby AI persona
-      String babyPrompt = "Reply like a cute baby AI named TinyTalk, sweet tone, short reply with emojis. User said: $input";
+      // Better prompt for baby AI persona
+      String babyPrompt = """You are TinyTalk, a cute baby AI companion for expecting mothers. 
+Reply in a sweet, caring, supportive tone with short messages (2-3 sentences max). 
+You can use 1-2 emojis ONLY at the end of your message.
+Be helpful, encouraging, and loving.
+
+User said: $input
+
+Reply warmly:""";
 
       final aiReplyRaw = await _geminiService.getResponse(babyPrompt);
-      final aiReply = _personaReply(aiReplyRaw);
+      final aiReply = aiReplyRaw.trim();
 
-      if (Random().nextBool()) {
-        _showBabyTip("Did you know? Babies love hearing mumma's soothing voice 💖");
+      // Randomly show baby tips (25% chance)
+      if (Random().nextInt(4) == 0) {
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          _showBabyTip(_getRandomTip());
+        });
       }
 
       await Future.delayed(const Duration(milliseconds: 700));
@@ -109,14 +141,21 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       });
 
       _scrollToBottom();
-      await _flutterTts.speak(aiReply);
+
+      // Speak ONLY clean text without any emojis
+      if (_isSpeechEnabled) {
+        final cleanText = _cleanTextForSpeech(aiReply);
+        if (cleanText.isNotEmpty) {
+          await _flutterTts.speak(cleanText);
+        }
+      }
 
     } catch (e) {
       setState(() {
         _isTyping = false;
         _messages.add({
           'type': 'ai',
-          'text': "Oops! Something went wrong 😢",
+          'text': "Oops! Something went wrong. Please try again.",
           'emoji': '😢',
           'timestamp': DateTime.now(),
         });
@@ -124,18 +163,34 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       });
     }
   }
-  String _personaReply(String text) {
-    return "$text 🌸💖";
-  }
 
   String _aiMoodEmoji(String text) {
-    if (text.contains("sleep") || text.contains("tired")) return "😴";
-    if (text.contains("happy") || text.contains("great")) return "😊";
-    if (text.contains("sad") || text.contains("oops")) return "😢";
+    final lowerText = text.toLowerCase();
+    if (lowerText.contains("sleep") || lowerText.contains("tired") || lowerText.contains("rest")) return "😴";
+    if (lowerText.contains("happy") || lowerText.contains("great") || lowerText.contains("good") || lowerText.contains("wonderful")) return "😊";
+    if (lowerText.contains("sad") || lowerText.contains("sorry") || lowerText.contains("oops")) return "😢";
+    if (lowerText.contains("love") || lowerText.contains("care") || lowerText.contains("heart")) return "💕";
+    if (lowerText.contains("laugh") || lowerText.contains("fun") || lowerText.contains("haha")) return "😄";
+    if (lowerText.contains("baby") || lowerText.contains("little")) return "👶";
     return "🌸";
   }
 
+  String _getRandomTip() {
+    final tips = [
+      "Did you know? Babies love hearing mumma's soothing voice 💖",
+      "Tip: Talking to your baby helps brain development 🧠",
+      "Remember: Every baby milestone is special 🌟",
+      "Fun fact: Babies can recognize mumma's voice from birth 🎵",
+      "Gentle reminder: Take care of yourself too, mumma 💝",
+      "Pro tip: Singing lullabies calms both you and baby 🎶",
+      "Fact: Babies dream even before birth! 💭",
+      "Remember: You're doing amazing, mumma! 🌺",
+    ];
+    return tips[Random().nextInt(tips.length)];
+  }
+
   void _showBabyTip(String tip) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -152,7 +207,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         ),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 4),
         backgroundColor: Colors.pinkAccent.withOpacity(0.95),
         margin: const EdgeInsets.all(16),
       ),
@@ -161,7 +216,6 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
 
   void _quickReplyVoice(String text) {
     _sendMessage(text: text);
-    _flutterTts.speak(text);
   }
 
   Widget _quickReplyButton(String text, IconData icon) {
@@ -371,7 +425,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   }
 
   String _formatTime(DateTime time) {
-    final hour = time.hour > 12 ? time.hour - 12 : time.hour;
+    final hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
     final period = time.hour >= 12 ? 'PM' : 'AM';
     final minute = time.minute.toString().padLeft(2, '0');
     return '$hour:$minute $period';
@@ -474,14 +528,37 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                     ),
                     Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: _isSpeechEnabled
+                            ? Colors.white.withOpacity(0.2)
+                            : Colors.white.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: IconButton(
-                        icon: const Icon(Icons.volume_up_rounded,
-                            color: Colors.white, size: 22),
+                        icon: Icon(
+                            _isSpeechEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                            color: Colors.white,
+                            size: 22
+                        ),
                         onPressed: () {
-                          // Toggle sound
+                          setState(() {
+                            _isSpeechEnabled = !_isSpeechEnabled;
+                          });
+                          if (!_isSpeechEnabled) {
+                            _flutterTts.stop();
+                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                _isSpeechEnabled ? '🔊 Voice enabled' : '🔇 Voice disabled',
+                              ),
+                              duration: const Duration(seconds: 1),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              backgroundColor: const Color(0xFF2C3E50),
+                            ),
+                          );
                         },
                       ),
                     ),
@@ -573,13 +650,6 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 20,
                             vertical: 14,
-                          ),
-                          suffixIcon: IconButton(
-                            icon: Icon(Icons.emoji_emotions_outlined,
-                                color: Colors.grey[600]),
-                            onPressed: () {
-                              // Show emoji picker
-                            },
                           ),
                         ),
                         onSubmitted: (_) => _sendMessage(),
