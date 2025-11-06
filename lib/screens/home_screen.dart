@@ -1,4 +1,5 @@
 import 'package:bump_bond_flutter_app/auth/MedicationRemindersScreen.dart';
+import 'package:bump_bond_flutter_app/auth/notification_screen.dart';
 import 'package:bump_bond_flutter_app/screens/baby_name_screen.dart';
 import 'package:bump_bond_flutter_app/screens/book_consultation_screen.dart';
 import 'package:bump_bond_flutter_app/screens/buddy_connect_screen.dart';
@@ -87,6 +88,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
 
     return Scaffold(
+
       backgroundColor: const Color(0xFFE6E6FA),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -115,6 +117,43 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  // Widget _buildGreeting() {
+  //   String greeting = "Good afternoon";
+  //   final hour = DateTime.now().hour;
+  //   if (hour < 12) greeting = "Good morning";
+  //   else if (hour >= 18) greeting = "Good evening";
+  //
+  //   return Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: [
+  //       Row(
+  //         children: [
+  //           Text(
+  //             '$greeting, $userName!',
+  //             style: const TextStyle(
+  //               fontSize: 28,
+  //               fontWeight: FontWeight.bold,
+  //               color: Color(0xFF1F2937),
+  //             ),
+  //           ),
+  //           const SizedBox(width: 8),
+  //           const Text('👋', style: TextStyle(fontSize: 28)),
+  //         ],
+  //       ),
+  //       const SizedBox(height: 8),
+  //       Text(
+  //         'You\'re $currentWeek weeks pregnant • $daysToGo days to go',
+  //         style: TextStyle(
+  //           fontSize: 15,
+  //           color: Colors.grey[600],
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
+
+
+
   Widget _buildGreeting() {
     String greeting = "Good afternoon";
     final hour = DateTime.now().hour;
@@ -125,19 +164,54 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              '$greeting, $userName!',
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1F2937),
+            // 👋 Greeting Text Section
+            Row(
+              children: [
+                Text(
+                  '$greeting, $userName!',
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1F2937),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text('👋', style: TextStyle(fontSize: 28)),
+              ],
+            ),
+
+            // 🔔 Notification Icon Section
+            GestureDetector(
+              onTap: () {
+                print("Notification icon tapped!");
+                Navigator.push(context, MaterialPageRoute(builder: (_) => NotificationScreen()));
+              },
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.3),
+                      spreadRadius: 1,
+                      blurRadius: 6,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.notifications,
+                  color: Color(0xFFB794F4),
+                  size: 28,
+                ),
               ),
             ),
-            const SizedBox(width: 8),
-            const Text('👋', style: TextStyle(fontSize: 28)),
           ],
         ),
+
         const SizedBox(height: 8),
         Text(
           'You\'re $currentWeek weeks pregnant • $daysToGo days to go',
@@ -149,6 +223,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ],
     );
   }
+
 
   Widget _buildWeekCard() {
     return Container(
@@ -382,7 +457,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => DailyQuizJourneyScreen(),
+                      builder: (context) => WeeklyQuizJourneyScreen(),
                     ),
                   );
                 },

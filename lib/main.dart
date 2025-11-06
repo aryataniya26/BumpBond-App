@@ -17,6 +17,18 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'models/journal_entry.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:bump_bond_flutter_app/services/notification_service.dart';
+import 'package:intl/intl.dart';
+
+
+
+// ✅ Background message handler (top-level function required)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print('🔔 Background Message: ${message.notification?.title}');
+}
 
 
 const String journalBoxName = 'journal_box';
@@ -46,6 +58,20 @@ Future<void> main() async {
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
+  // Notification permission lo
+  FirebaseMessaging messaging = FirebaseMessaging.instance;
+  await messaging.requestPermission();
+
+  // ✅ Initialize Notifications
+  await NotificationService.initialize();
+
+  // ✅ Set background message handler
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+
+  // Background message handler
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
   // Hive initialization
   await Hive.initFlutter();
   Hive.registerAdapter(JournalEntryAdapter());
@@ -68,10 +94,6 @@ Future<void> main() async {
   }
 
   runApp(const MyApp());
-}
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  print("Background Message: ${message.notification?.title}");
 }
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
