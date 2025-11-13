@@ -38,6 +38,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadUserData();
   }
 
+  // Future<void> _loadUserData() async {
+  //   try {
+  //     // Load from SharedPreferences
+  //     final prefs = await SharedPreferences.getInstance();
+  //     final savedName = prefs.getString('userName');
+  //
+  //     // Load PregnancyData
+  //     PregnancyData pregnancyData = await PregnancyData.loadFromPrefs();
+  //
+  //     setState(() {
+  //       userName = savedName ?? _auth.currentUser?.displayName ?? "Mom";
+  //       userEmail = _auth.currentUser?.email ?? "";
+  //       userPhotoUrl = _auth.currentUser?.photoURL;
+  //       lastPeriodDate = pregnancyData.lastPeriodDate;
+  //       dueDate = pregnancyData.dueDate;
+  //       isLoading = false;
+  //     });
+  //   } catch (e) {
+  //     print("Error loading user data: $e");
+  //     setState(() => isLoading = false);
+  //   }
+  // }
   Future<void> _loadUserData() async {
     try {
       // Load from SharedPreferences
@@ -46,6 +68,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // Load PregnancyData
       PregnancyData pregnancyData = await PregnancyData.loadFromPrefs();
+
+      print('SettingsScreen - Loaded pregnancy data:');
+      print('Due Date: ${pregnancyData.dueDate}');
+      print('Last Period: ${pregnancyData.lastPeriodDate}');
+      print('Nickname: ${pregnancyData.babyNickname}');
 
       setState(() {
         userName = savedName ?? _auth.currentUser?.displayName ?? "Mom";
@@ -60,6 +87,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() => isLoading = false);
     }
   }
+
+
+
+
 
   void logout(BuildContext context) async {
     showDialog(

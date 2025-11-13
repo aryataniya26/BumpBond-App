@@ -138,43 +138,117 @@ class PregnancyData {
     return days > 0 ? days : 0;
   }
 
-  // ✅ Save to SharedPreferences
+  // // ✅ Save to SharedPreferences
+  // Future<void> saveToPrefs() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   if (lastPeriodDate != null) {
+  //     prefs.setString('lastPeriodDate', lastPeriodDate!.toIso8601String());
+  //   }
+  //   if (dueDate != null) {
+  //     prefs.setString('dueDate', dueDate!.toIso8601String());
+  //   }
+  //   if (conceptionDate != null) {
+  //     prefs.setString('conceptionDate', conceptionDate!.toIso8601String());
+  //   }
+  //   if (babyNickname != null) {
+  //     prefs.setString('babyNickname', babyNickname!);
+  //   }
+  // }
+  //
+  // // ✅ Load from SharedPreferences
+  // static Future<PregnancyData> loadFromPrefs() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   PregnancyData data = PregnancyData();
+  //
+  //   if (prefs.containsKey('lastPeriodDate')) {
+  //     data.lastPeriodDate = DateTime.parse(prefs.getString('lastPeriodDate')!);
+  //   }
+  //   if (prefs.containsKey('dueDate')) {
+  //     data.dueDate = DateTime.parse(prefs.getString('dueDate')!);
+  //   }
+  //   if (prefs.containsKey('conceptionDate')) {
+  //     data.conceptionDate = DateTime.parse(prefs.getString('conceptionDate')!);
+  //   }
+  //   if (prefs.containsKey('babyNickname')) {
+  //     data.babyNickname = prefs.getString('babyNickname');
+  //   }
+  //
+  //   return data;
+  // }
+
+
+  // ✅ Enhanced Save to SharedPreferences
   Future<void> saveToPrefs() async {
     final prefs = await SharedPreferences.getInstance();
+
+    print('Saving Pregnancy Data:');
+    print('Last Period: $lastPeriodDate');
+    print('Due Date: $dueDate');
+    print('Baby Nickname: $babyNickname');
+
     if (lastPeriodDate != null) {
-      prefs.setString('lastPeriodDate', lastPeriodDate!.toIso8601String());
+      await prefs.setString('lastPeriodDate', lastPeriodDate!.toIso8601String());
+    } else {
+      await prefs.remove('lastPeriodDate');
     }
+
     if (dueDate != null) {
-      prefs.setString('dueDate', dueDate!.toIso8601String());
+      await prefs.setString('dueDate', dueDate!.toIso8601String());
+    } else {
+      await prefs.remove('dueDate');
     }
+
     if (conceptionDate != null) {
-      prefs.setString('conceptionDate', conceptionDate!.toIso8601String());
+      await prefs.setString('conceptionDate', conceptionDate!.toIso8601String());
+    } else {
+      await prefs.remove('conceptionDate');
     }
-    if (babyNickname != null) {
-      prefs.setString('babyNickname', babyNickname!);
+
+    if (babyNickname != null && babyNickname!.isNotEmpty) {
+      await prefs.setString('babyNickname', babyNickname!);
+    } else {
+      await prefs.remove('babyNickname');
     }
+
+    // Force immediate save
+    await prefs.reload();
   }
 
-  // ✅ Load from SharedPreferences
+// ✅ Enhanced Load from SharedPreferences
   static Future<PregnancyData> loadFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     PregnancyData data = PregnancyData();
 
-    if (prefs.containsKey('lastPeriodDate')) {
-      data.lastPeriodDate = DateTime.parse(prefs.getString('lastPeriodDate')!);
-    }
-    if (prefs.containsKey('dueDate')) {
-      data.dueDate = DateTime.parse(prefs.getString('dueDate')!);
-    }
-    if (prefs.containsKey('conceptionDate')) {
-      data.conceptionDate = DateTime.parse(prefs.getString('conceptionDate')!);
-    }
-    if (prefs.containsKey('babyNickname')) {
-      data.babyNickname = prefs.getString('babyNickname');
+    try {
+      if (prefs.containsKey('lastPeriodDate')) {
+        final dateString = prefs.getString('lastPeriodDate')!;
+        data.lastPeriodDate = DateTime.parse(dateString);
+        print('Loaded Last Period: ${data.lastPeriodDate}');
+      }
+
+      if (prefs.containsKey('dueDate')) {
+        final dateString = prefs.getString('dueDate')!;
+        data.dueDate = DateTime.parse(dateString);
+        print('Loaded Due Date: ${data.dueDate}');
+      }
+
+      if (prefs.containsKey('conceptionDate')) {
+        final dateString = prefs.getString('conceptionDate')!;
+        data.conceptionDate = DateTime.parse(dateString);
+      }
+
+      if (prefs.containsKey('babyNickname')) {
+        data.babyNickname = prefs.getString('babyNickname');
+        print('Loaded Nickname: ${data.babyNickname}');
+      }
+    } catch (e) {
+      print('Error loading pregnancy data: $e');
     }
 
     return data;
   }
+
+
 
   // ✅ Clear all data
   static Future<void> clearPrefs() async {

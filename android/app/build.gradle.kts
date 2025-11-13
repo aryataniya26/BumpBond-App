@@ -50,7 +50,8 @@ flutter {
 }
 
 dependencies {
-    // ✅ Required for QR code scanning and camera
+    implementation("com.google.firebase:firebase-messaging:23.4.0")
+    implementation("com.google.firebase:firebase-analytics:21.5.0")
     implementation("androidx.fragment:fragment-ktx:1.6.2")
     implementation("androidx.activity:activity-ktx:1.8.2")
     implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.22")

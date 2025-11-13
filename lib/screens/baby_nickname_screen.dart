@@ -22,7 +22,24 @@ class _BabyNicknameScreenState extends State<BabyNicknameScreen> {
     'Cupcake', 'Buttercup', 'Sprout', 'Bubba', 'Love Bug'
   ];
 
-  Future<void> _saveAndContinue() async {
+
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Pre-fill existing nickname if available
+    if (widget.pregnancyData.babyNickname != null &&
+        widget.pregnancyData.babyNickname!.isNotEmpty) {
+      _nicknameController.text = widget.pregnancyData.babyNickname!;
+    }
+
+    print('BabyNicknameScreen - Existing nickname: ${widget.pregnancyData.babyNickname}');
+  }
+
+
+
+    Future<void> _saveAndContinue() async {
     final nickname = _nicknameController.text.trim();
 
     if (nickname.isEmpty) {

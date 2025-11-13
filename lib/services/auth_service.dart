@@ -175,24 +175,49 @@ class AuthService {
   }
 
   // ✅ Logout (Complete cleanup)
+  // Future<String?> logout() async {
+  //   try {
+  //     await _auth.signOut();
+  //     await _googleSignIn.signOut();
+  //
+  //     final prefs = await SharedPreferences.getInstance();
+  //     await prefs.remove('isLoggedIn');
+  //     await prefs.remove('lastPeriodDate');
+  //     await prefs.remove('dueDate');
+  //     await prefs.remove('conceptionDate');
+  //     await prefs.remove('babyNickname');
+  //
+  //     return null; // Success
+  //   } catch (e) {
+  //     return "Logout failed: ${e.toString()}";
+  //   }
+  // }
+  // ✅ Improved Logout (Don't Clear Pregnancy Data)
+// ✅ Improved Logout (Don't Clear Pregnancy Data)
   Future<String?> logout() async {
     try {
+      // Sign out from Firebase
       await _auth.signOut();
+
+      // Sign out from Google
       await _googleSignIn.signOut();
 
+      // ✅ ONLY clear login state, NOT pregnancy data
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('isLoggedIn');
-      await prefs.remove('lastPeriodDate');
-      await prefs.remove('dueDate');
-      await prefs.remove('conceptionDate');
-      await prefs.remove('babyNickname');
+      await prefs.setBool('isLoggedIn', false); // ← ONLY THIS
 
-      return null; // Success
+      // ❌ DON'T clear pregnancy data - YE COMMENT/REMOVE KAREIN
+      // await prefs.remove('lastPeriodDate');
+      // await prefs.remove('dueDate');
+      // await prefs.remove('conceptionDate');
+      // await prefs.remove('babyNickname');
+
+      print('✅ Logout successful - Pregnancy data preserved');
+      return null;
     } catch (e) {
       return "Logout failed: ${e.toString()}";
     }
   }
-
   // ✅ Get current user
   User? getCurrentUser() {
     return _auth.currentUser;

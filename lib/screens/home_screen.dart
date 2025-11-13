@@ -117,40 +117,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  // Widget _buildGreeting() {
-  //   String greeting = "Good afternoon";
-  //   final hour = DateTime.now().hour;
-  //   if (hour < 12) greeting = "Good morning";
-  //   else if (hour >= 18) greeting = "Good evening";
-  //
-  //   return Column(
-  //     crossAxisAlignment: CrossAxisAlignment.start,
-  //     children: [
-  //       Row(
-  //         children: [
-  //           Text(
-  //             '$greeting, $userName!',
-  //             style: const TextStyle(
-  //               fontSize: 28,
-  //               fontWeight: FontWeight.bold,
-  //               color: Color(0xFF1F2937),
-  //             ),
-  //           ),
-  //           const SizedBox(width: 8),
-  //           const Text('👋', style: TextStyle(fontSize: 28)),
-  //         ],
-  //       ),
-  //       const SizedBox(height: 8),
-  //       Text(
-  //         'You\'re $currentWeek weeks pregnant • $daysToGo days to go',
-  //         style: TextStyle(
-  //           fontSize: 15,
-  //           color: Colors.grey[600],
-  //         ),
-  //       ),
-  //     ],
-  //   );
-  // }
 
 
 
@@ -328,6 +294,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
               ),
               Container(
+                height: 180,
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -344,7 +311,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       babyEmoji,
                       style: const TextStyle(fontSize: 50),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 3),
                     Text(
                       babyName,
                       style: const TextStyle(
@@ -377,7 +344,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: LinearProgressIndicator(
@@ -441,7 +408,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           color: const Color(0xFF8B5CF6),
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const ChatScreen()),
+            MaterialPageRoute(builder: (_) => ChatScreen(babyName: babyName)),
           ),
         ),
         const SizedBox(height: 12),

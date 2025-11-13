@@ -1,3 +1,6 @@
+import 'package:bump_bond_flutter_app/main.dart';
+import 'package:bump_bond_flutter_app/models/pregnancy_data.dart';
+import 'package:bump_bond_flutter_app/screens/baby_nickname_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bump_bond_flutter_app/services/auth_service.dart';
@@ -57,16 +60,106 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     _animController.forward();
   }
 
+  // Future<void> _initPrefs() async {
+  //   prefs = await SharedPreferences.getInstance();
+  //   bool loggedIn = prefs.getBool('isLoggedIn') ?? false;
+  //   if (loggedIn && mounted) {
+  //     Navigator.pushReplacement(
+  //       context,
+  //       MaterialPageRoute(builder: (_) => const DueDateSetupScreen()),
+  //     );
+  //   }
+  // }
+  // Future<void> _initPrefs() async {
+  //   prefs = await SharedPreferences.getInstance();
+  //   bool loggedIn = prefs.getBool('isLoggedIn') ?? false;
+  //
+  //   if (loggedIn && mounted) {
+  //     // ✅ Check if pregnancy data exists and is complete
+  //     PregnancyData pregnancyData = await PregnancyData.loadFromPrefs();
+  //
+  //     print('Debug - Due Date: ${pregnancyData.dueDate}');
+  //     print('Debug - Last Period: ${pregnancyData.lastPeriodDate}');
+  //     print('Debug - Baby Nickname: ${pregnancyData.babyNickname}');
+  //
+  //     if (pregnancyData.dueDate != null &&
+  //         pregnancyData.lastPeriodDate != null &&
+  //         pregnancyData.babyNickname != null) {
+  //       // ✅ User has COMPLETED setup - Go to Main Screen
+  //       print('Redirecting to MainScreen - Setup Complete');
+  //       Navigator.pushReplacement(
+  //         context,
+  //         MaterialPageRoute(builder: (_) => const MainScreen()),
+  //       );
+  //     } else if (pregnancyData.dueDate != null && pregnancyData.lastPeriodDate != null) {
+  //       // ✅ User has due date but no nickname - Go to Nickname Screen
+  //       print('Redirecting to BabyNicknameScreen - Missing Nickname');
+  //       Navigator.pushReplacement(
+  //         context,
+  //         MaterialPageRoute(builder: (_) =>BabyNicknameScreen(pregnancyData: pregnancyData)),
+  //       );
+  //     } else {
+  //       // ✅ User logged in but no pregnancy data - Go to Setup
+  //       print('Redirecting to DueDateSetupScreen - No Data');
+  //       Navigator.pushReplacement(
+  //         context,
+  //         MaterialPageRoute(builder: (_) => const DueDateSetupScreen()),
+  //       );
+  //     }
+  //   }
+  // }
+
   Future<void> _initPrefs() async {
     prefs = await SharedPreferences.getInstance();
     bool loggedIn = prefs.getBool('isLoggedIn') ?? false;
+
     if (loggedIn && mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const DueDateSetupScreen()),
-      );
+      // ✅ Check if pregnancy data exists and is complete
+      PregnancyData pregnancyData = await PregnancyData.loadFromPrefs();
+
+      print('🔍 LoginScreen Debug:');
+      print('Due Date: ${pregnancyData.dueDate}');
+      print('Last Period: ${pregnancyData.lastPeriodDate}');
+      print('Baby Nickname: ${pregnancyData.babyNickname}');
+      print('Is Setup Complete: ${pregnancyData.dueDate != null && pregnancyData.lastPeriodDate != null && pregnancyData.babyNickname != null}');
+
+      // ✅ COMPLETE SETUP CHECK - All 3 conditions must be true
+      if (pregnancyData.dueDate != null &&
+          pregnancyData.lastPeriodDate != null &&
+          pregnancyData.babyNickname != null &&
+          pregnancyData.babyNickname!.isNotEmpty) {
+
+        // ✅ User has COMPLETED full setup - Go DIRECTLY to MainScreen
+        print('🚀 Redirecting to MainScreen - Setup Complete');
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+              (route) => false,
+        );
+
+      } else if (pregnancyData.dueDate != null && pregnancyData.lastPeriodDate != null) {
+        // ✅ User has due date but no nickname - Go to Nickname Screen
+        print('👶 Redirecting to BabyNicknameScreen - Missing Nickname');
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => BabyNicknameScreen(pregnancyData: pregnancyData)),
+              (route) => false,
+        );
+
+      } else {
+        // ✅ User logged in but no pregnancy data - Go to Setup
+        print('📅 Redirecting to DueDateSetupScreen - No Data');
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const DueDateSetupScreen()),
+              (route) => false,
+        );
+      }
     }
   }
+
+
+
 
   @override
   void dispose() {

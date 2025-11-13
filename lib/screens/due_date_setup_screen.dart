@@ -29,15 +29,43 @@ class _DueDateSetupScreenState extends State<DueDateSetupScreen> {
     _loadData();
   }
 
+  // Future<void> _loadData() async {
+  //   _data = await PregnancyData.loadFromPrefs();
+  //   setState(() {
+  //     if (_data.dueDate != null) {
+  //       _selectedDateText = DateFormat.yMd().format(_data.dueDate!);
+  //       _selectedDate = _data.dueDate;
+  //     }
+  //   });
+  // }
   Future<void> _loadData() async {
     _data = await PregnancyData.loadFromPrefs();
+
+    print('DueDateSetup - Loading existing data:');
+    print('Due Date: ${_data.dueDate}');
+    print('Last Period: ${_data.lastPeriodDate}');
+
     setState(() {
       if (_data.dueDate != null) {
-        _selectedDateText = DateFormat.yMd().format(_data.dueDate!);
+        _selectedDateText = DateFormat.yMMMd().format(_data.dueDate!);
         _selectedDate = _data.dueDate;
+
+        // Auto-select the appropriate method
+        if (_data.lastPeriodDate != null) {
+          _estimationMethod = "First day of last period";
+        } else if (_data.conceptionDate != null) {
+          _estimationMethod = "Date of conception";
+        }
+      }
+
+      if (_data.lastPeriodDate != null) {
+        _selectedDateText = DateFormat.yMMMd().format(_data.lastPeriodDate!);
+        _selectedDate = _data.lastPeriodDate;
       }
     });
   }
+
+
 
   Future<void> _selectDate(BuildContext context) async {
     // ✅ Allow user to pick *any date* in the full calendar range
