@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class StatePolicyService {
-  final String apiKey = "YOUR_OPENAI_API_KEY"; // 👈 apni API key daalo
+  final String apiKey = "YOUR_OPENAI_API_KEY";
 
   Future<List<Map<String, String>>> fetchPolicies(String state) async {
     final prompt = """
