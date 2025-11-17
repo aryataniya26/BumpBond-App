@@ -460,7 +460,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: 'Discover premium features',
                 onTap: () {
                   Navigator.push(context,
-                      MaterialPageRoute(builder: (context) => StateBenefitsScreen()));
+                      MaterialPageRoute(builder: (context) => GovernmentPolicyScreen()));
                 },
               ),
               const SizedBox(height: 12),

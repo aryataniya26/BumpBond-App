@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class StateBenefitsScreen extends StatefulWidget {
-  const StateBenefitsScreen({Key? key}) : super(key: key);
+class GovernmentPolicyScreen extends StatefulWidget {
+  const GovernmentPolicyScreen({Key? key}) : super(key: key);
 
   @override
-  State<StateBenefitsScreen> createState() => _StateBenefitsScreenState();
+  State<GovernmentPolicyScreen> createState() => _StateBenefitsScreenState();
 }
 
-class _StateBenefitsScreenState extends State<StateBenefitsScreen> {
+class _StateBenefitsScreenState extends State<GovernmentPolicyScreen> {
   String selectedState = 'All States';
   bool isLoading = false;
   List<Map<String, String>> policies = [];
