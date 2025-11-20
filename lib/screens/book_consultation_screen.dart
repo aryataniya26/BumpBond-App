@@ -57,13 +57,14 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
     setState(() {
       savedBookings = bookingsJson.map((json) {
         final parts = json.split('|');
-        return {
-          'date': parts[0],
-          'time': parts[1],
-          'duration': parts[2],
-          'type': parts[3],
-          'price': parts[4],
-        };
+      return {
+        'date': parts[0],
+        'time': parts[1],
+        'duration': parts[2],
+        'type': parts[3],
+        'price': parts[4],
+        'doctor': parts.length > 5 ? parts[5] : 'Dr. Not Assigned', // Add this
+      };
       }).toList();
     });
   }
@@ -125,16 +126,48 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
     );
   }
 
+  // Future<void> _processPayment(int amount) async {
+  //   // TODO: Actual payment gateway integration add in this
+  //   // For now, we'll simulate successful payment
+  //
+  //   Navigator.of(context).pop(); // Dialog close
+  //
+  //   // Save booking after successful payment
+  //   final prefs = await SharedPreferences.getInstance();
+  //   final dateStr = DateFormat('dd/MM/yyyy').format(selectedDate!);
+  //   final bookingStr = '$dateStr|$selectedTime|$selectedDuration|$consultationType|₹$amount|Dr. Not Assigned';
+  //   final bookings = prefs.getStringList('bookings') ?? [];
+  //   bookings.add(bookingStr);
+  //   await prefs.setStringList('bookings', bookings);
+  //
+  //   setState(() {
+  //     savedBookings.add({
+  //       'date': dateStr,
+  //       'time': selectedTime,
+  //       'duration': selectedDuration,
+  //       'type': consultationType,
+  //       'price': '₹$amount',
+  //     });
+  //     selectedDate = null;
+  //     selectedTime = null;
+  //     selectedDuration = null;
+  //     consultationType = null;
+  //   });
+  //
+  //   ScaffoldMessenger.of(context).showSnackBar(
+  //     const SnackBar(content: Text('Payment successful! Consultation booked.')),
+  //   );
+  // }
   Future<void> _processPayment(int amount) async {
-    // TODO: Actual payment gateway integration यहाँ add करें
+    // TODO: Add Actual payment gateway integration
     // For now, we'll simulate successful payment
 
-    Navigator.of(context).pop(); // Dialog close करें
+    Navigator.of(context).pop(); // Dialog close
 
-    // Save booking after successful payment
+    // Save booking after successful payment - FORMAT UPDATE KARO
     final prefs = await SharedPreferences.getInstance();
     final dateStr = DateFormat('dd/MM/yyyy').format(selectedDate!);
-    final bookingStr = '$dateStr|$selectedTime|$selectedDuration|$consultationType|₹$amount';
+    final bookingStr = '$dateStr|$selectedTime|$selectedDuration|$consultationType|₹$amount|Dr. Not Assigned'; // Doctor add karo
 
     final bookings = prefs.getStringList('bookings') ?? [];
     bookings.add(bookingStr);
@@ -147,6 +180,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
         'duration': selectedDuration,
         'type': consultationType,
         'price': '₹$amount',
+        'doctor': 'Dr. Not Assigned',
       });
       selectedDate = null;
       selectedTime = null;

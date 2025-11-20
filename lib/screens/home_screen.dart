@@ -155,7 +155,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 Navigator.push(context, MaterialPageRoute(builder: (_) => NotificationScreen()));
               },
               child: Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
@@ -171,7 +171,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: const Icon(
                   Icons.notifications,
                   color: Color(0xFFB794F4),
-                  size: 28,
+                  size: 27,
                 ),
               ),
             ),
@@ -759,7 +759,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 icon: Icons.people_rounded,
                 title: 'Buddy Connect',
                 subtitle: 'Expert support',
-                color: const Color(0xFF3B82F6),
+                color: const Color(0xFF6A0DAD),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => BuddyConnectHome()),

@@ -117,11 +117,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
               onPressed: _clearAll,
               tooltip: 'Clear all',
             ),
-          IconButton(
-            icon: const Icon(Icons.notifications_active),
-            onPressed: _sendTestNotification,
-            tooltip: 'Test notification',
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.notifications_active),
+          //   onPressed: _sendTestNotification,
+          //   tooltip: 'Test notification',
+          // ),
         ],
       ),
       body: isLoading

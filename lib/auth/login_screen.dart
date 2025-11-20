@@ -60,54 +60,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     _animController.forward();
   }
 
-  // Future<void> _initPrefs() async {
-  //   prefs = await SharedPreferences.getInstance();
-  //   bool loggedIn = prefs.getBool('isLoggedIn') ?? false;
-  //   if (loggedIn && mounted) {
-  //     Navigator.pushReplacement(
-  //       context,
-  //       MaterialPageRoute(builder: (_) => const DueDateSetupScreen()),
-  //     );
-  //   }
-  // }
-  // Future<void> _initPrefs() async {
-  //   prefs = await SharedPreferences.getInstance();
-  //   bool loggedIn = prefs.getBool('isLoggedIn') ?? false;
-  //
-  //   if (loggedIn && mounted) {
-  //     // ✅ Check if pregnancy data exists and is complete
-  //     PregnancyData pregnancyData = await PregnancyData.loadFromPrefs();
-  //
-  //     print('Debug - Due Date: ${pregnancyData.dueDate}');
-  //     print('Debug - Last Period: ${pregnancyData.lastPeriodDate}');
-  //     print('Debug - Baby Nickname: ${pregnancyData.babyNickname}');
-  //
-  //     if (pregnancyData.dueDate != null &&
-  //         pregnancyData.lastPeriodDate != null &&
-  //         pregnancyData.babyNickname != null) {
-  //       // ✅ User has COMPLETED setup - Go to Main Screen
-  //       print('Redirecting to MainScreen - Setup Complete');
-  //       Navigator.pushReplacement(
-  //         context,
-  //         MaterialPageRoute(builder: (_) => const MainScreen()),
-  //       );
-  //     } else if (pregnancyData.dueDate != null && pregnancyData.lastPeriodDate != null) {
-  //       // ✅ User has due date but no nickname - Go to Nickname Screen
-  //       print('Redirecting to BabyNicknameScreen - Missing Nickname');
-  //       Navigator.pushReplacement(
-  //         context,
-  //         MaterialPageRoute(builder: (_) =>BabyNicknameScreen(pregnancyData: pregnancyData)),
-  //       );
-  //     } else {
-  //       // ✅ User logged in but no pregnancy data - Go to Setup
-  //       print('Redirecting to DueDateSetupScreen - No Data');
-  //       Navigator.pushReplacement(
-  //         context,
-  //         MaterialPageRoute(builder: (_) => const DueDateSetupScreen()),
-  //       );
-  //     }
-  //   }
-  // }
+
 
   Future<void> _initPrefs() async {
     prefs = await SharedPreferences.getInstance();
@@ -202,6 +155,31 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   }
 
   // LOGIN FUNCTIONS
+  // Future<void> _loginWithEmail() async {
+  //   String email = loginEmailController.text.trim();
+  //   String password = loginPasswordController.text.trim();
+  //
+  //   if (email.isEmpty || password.isEmpty) {
+  //     _showSnackBar("Please enter email and password", isError: true);
+  //     return;
+  //   }
+  //
+  //   setState(() => isLoading = true);
+  //   final error = await _authService.loginWithEmail(email, password);
+  //   setState(() => isLoading = false);
+  //
+  //   if (error != null) {
+  //     _showSnackBar(error, isError: true);
+  //   } else {
+  //     await prefs.setBool('isLoggedIn', true);
+  //     if (mounted) {
+  //       Navigator.pushReplacement(
+  //         context,
+  //         MaterialPageRoute(builder: (_) => const DueDateSetupScreen()),
+  //       );
+  //     }
+  //   }
+  // }
   Future<void> _loginWithEmail() async {
     String email = loginEmailController.text.trim();
     String password = loginPasswordController.text.trim();
@@ -213,38 +191,115 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
     setState(() => isLoading = true);
     final error = await _authService.loginWithEmail(email, password);
-    setState(() => isLoading = false);
 
     if (error != null) {
+      setState(() => isLoading = false);
       _showSnackBar(error, isError: true);
     } else {
+      // ✅ CRITICAL FIX: Save login state IMMEDIATELY
       await prefs.setBool('isLoggedIn', true);
-      if (mounted) {
-        Navigator.pushReplacement(
+
+      // ✅ Check pregnancy data and navigate accordingly
+      PregnancyData pregnancyData = await PregnancyData.loadFromPrefs();
+
+      setState(() => isLoading = false);
+
+      if (!mounted) return;
+
+      if (pregnancyData.dueDate != null &&
+          pregnancyData.lastPeriodDate != null &&
+          pregnancyData.babyNickname != null &&
+          pregnancyData.babyNickname!.isNotEmpty) {
+        // ✅ Complete setup - go to MainScreen
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+              (route) => false,
+        );
+      } else if (pregnancyData.dueDate != null && pregnancyData.lastPeriodDate != null) {
+        // ✅ Has due date but no nickname
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => BabyNicknameScreen(pregnancyData: pregnancyData)),
+              (route) => false,
+        );
+      } else {
+        // ❌ No pregnancy data - setup required
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const DueDateSetupScreen()),
+              (route) => false,
         );
       }
     }
   }
+
+
+
+
+  // Future<void> _loginWithGoogle() async {
+  //   setState(() => isLoading = true);
+  //   final error = await _authService.signInWithGoogle();
+  //   setState(() => isLoading = false);
+  //
+  //   if (error != null) {
+  //     _showSnackBar(error, isError: true);
+  //   } else {
+  //     await prefs.setBool('isLoggedIn', true);
+  //     if (mounted) {
+  //       Navigator.pushReplacement(
+  //         context,
+  //         MaterialPageRoute(builder: (_) => const DueDateSetupScreen()),
+  //       );
+  //     }
+  //   }
+  // }
 
   Future<void> _loginWithGoogle() async {
     setState(() => isLoading = true);
     final error = await _authService.signInWithGoogle();
-    setState(() => isLoading = false);
 
     if (error != null) {
+      setState(() => isLoading = false);
       _showSnackBar(error, isError: true);
     } else {
+      // ✅ CRITICAL FIX: Save login state
       await prefs.setBool('isLoggedIn', true);
-      if (mounted) {
-        Navigator.pushReplacement(
+
+      // ✅ Same pregnancy data check as above
+      PregnancyData pregnancyData = await PregnancyData.loadFromPrefs();
+
+      setState(() => isLoading = false);
+
+      if (!mounted) return;
+
+      // ✅ Use the SAME navigation logic as email login
+      if (pregnancyData.dueDate != null &&
+          pregnancyData.lastPeriodDate != null &&
+          pregnancyData.babyNickname != null &&
+          pregnancyData.babyNickname!.isNotEmpty) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+              (route) => false,
+        );
+      } else if (pregnancyData.dueDate != null && pregnancyData.lastPeriodDate != null) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => BabyNicknameScreen(pregnancyData: pregnancyData)),
+              (route) => false,
+        );
+      } else {
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const DueDateSetupScreen()),
+              (route) => false,
         );
       }
     }
   }
+
+
 
   // SIGNUP FUNCTIONS
   Future<void> _signUpWithEmail() async {

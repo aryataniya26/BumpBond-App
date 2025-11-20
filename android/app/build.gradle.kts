@@ -12,9 +12,7 @@ android {
     namespace = "com.example.bump_bond_flutter_app" // ✅ App's namespace
     compileSdk = 36
     buildToolsVersion = "34.0.0"
-
-//    ndkVersion = "27.0.12077973"
-
+    ndkVersion = "28.2.13676358"
     defaultConfig {
         applicationId = "com.example.bump_bond_flutter_app"
         minSdk = flutter.minSdkVersion

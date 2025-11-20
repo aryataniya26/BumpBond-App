@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:bump_bond_flutter_app/screens/baby_nickname_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -43,40 +44,112 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     _controller.forward();
   }
 
+  // Future<void> _checkAuthFlow() async {
+  //   await Future.delayed(const Duration(seconds: 2));
+  //
+  //   final prefs = await SharedPreferences.getInstance();
+  //   final user = FirebaseAuth.instance.currentUser;
+  //
+  //   if (!mounted) return;
+  //
+  //   // ✅ Case 1: User is logged in
+  //   if (user != null) {
+  //     // Check if due date is set
+  //     final pregnancyData = await PregnancyData.loadFromPrefs();
+  //
+  //     if (pregnancyData.dueDate != null && pregnancyData.lastPeriodDate != null) {
+  //       // ✅ User has completed setup → Go to Home
+  //       Navigator.pushReplacement(
+  //         context,
+  //         MaterialPageRoute(builder: (_) => const MainScreen()),
+  //       );
+  //     } else {
+  //       // ✅ User logged in but hasn't set due date → Go to Setup
+  //       Navigator.pushReplacement(
+  //         context,
+  //         MaterialPageRoute(builder: (_) => const DueDateSetupScreen()),
+  //       );
+  //     }
+  //   } else {
+  //     // ✅ Case 2: User is NOT logged in → Go to Onboarding
+  //     Navigator.pushReplacement(
+  //       context,
+  //       MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+  //     );
+  //   }
+  // }
   Future<void> _checkAuthFlow() async {
     await Future.delayed(const Duration(seconds: 2));
 
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
+    final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
 
     if (!mounted) return;
 
-    // ✅ Case 1: User is logged in
-    if (user != null) {
-      // Check if due date is set
+    print('🔍 SplashScreen Debug:');
+    print('Firebase User: $user');
+    print('isLoggedIn Flag: $isLoggedIn');
+
+    // ✅ Case 1: User is properly logged in (BOTH Firebase AND our flag)
+    if (user != null && isLoggedIn) {
       final pregnancyData = await PregnancyData.loadFromPrefs();
 
-      if (pregnancyData.dueDate != null && pregnancyData.lastPeriodDate != null) {
-        // ✅ User has completed setup → Go to Home
-        Navigator.pushReplacement(
+      print('Due Date: ${pregnancyData.dueDate}');
+      print('Last Period: ${pregnancyData.lastPeriodDate}');
+      print('Baby Nickname: ${pregnancyData.babyNickname}');
+
+      if (pregnancyData.dueDate != null &&
+          pregnancyData.lastPeriodDate != null &&
+          pregnancyData.babyNickname != null &&
+          pregnancyData.babyNickname!.isNotEmpty) {
+        // ✅ COMPLETE SETUP - Go to Main Screen
+        print('🚀 Redirecting to MainScreen - Setup Complete');
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const MainScreen()),
+              (route) => false,
+        );
+      } else if (pregnancyData.dueDate != null && pregnancyData.lastPeriodDate != null) {
+        // ✅ HAS DUE DATE but no nickname
+        print('👶 Redirecting to BabyNicknameScreen');
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => BabyNicknameScreen(pregnancyData: pregnancyData)),
+              (route) => false,
         );
       } else {
-        // ✅ User logged in but hasn't set due date → Go to Setup
-        Navigator.pushReplacement(
+        // ❌ LOGGED IN but no pregnancy data
+        print('📅 Redirecting to DueDateSetupScreen');
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const DueDateSetupScreen()),
+              (route) => false,
         );
       }
-    } else {
-      // ✅ Case 2: User is NOT logged in → Go to Onboarding
-      Navigator.pushReplacement(
+    }
+    // ✅ Case 2: User has Firebase session but our flag is missing (FIX STATE)
+    else if (user != null && !isLoggedIn) {
+      print('🔄 Fixing missing login state...');
+      await prefs.setBool('isLoggedIn', true);
+
+      // Retry the check
+      _checkAuthFlow();
+      return;
+    }
+    // ✅ Case 3: User is NOT logged in
+    else {
+      print('🎯 Redirecting to Onboarding - Not Logged In');
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+            (route) => false,
       );
     }
   }
+
+
+
 
   @override
   void dispose() {

@@ -36,17 +36,16 @@ class _ConsultationHistoryScreenState
         if (parts.length >= 4) {
           history.add({
             'type': parts[3], // consultation type
-            'doctor': 'Dr. Not Assigned', // Will be updated after consultation
+            'doctor': parts.length > 5 ? parts[5] : 'Dr. Not Assigned', // Updated
             'date': parts[0], // dd/MM/yyyy
             'time': parts[1],
             'duration': parts[2],
             'rating': 0,
             'notes': '',
-            'status': 'booked', // booked or completed
+            'status': 'booked',
             'icon': _getIconForType(parts[3]),
           });
-        }
-      } catch (e) {
+        }      } catch (e) {
         print('Error parsing booking: $e');
       }
     }
@@ -131,6 +130,7 @@ class _ConsultationHistoryScreenState
     // Delete from appropriate storage
     if (consultation['status'] == 'booked') {
       final bookingsJson = prefs.getStringList('bookings') ?? [];
+// _deleteConsultation function mein:
       bookingsJson.removeWhere((booking) {
         try {
           final parts = booking.split('|');
@@ -141,8 +141,7 @@ class _ConsultationHistoryScreenState
         } catch (e) {
           return false;
         }
-      });
-      await prefs.setStringList('bookings', bookingsJson);
+      });      await prefs.setStringList('bookings', bookingsJson);
     } else {
       final historyJson = prefs.getStringList('consultation_history') ?? [];
       historyJson.removeAt(index);
