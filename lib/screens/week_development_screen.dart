@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../models/pregnancy_data.dart'; // ✅ Add this import
 
 class PregnancyJourneyScreen extends StatefulWidget {
+  final int? initialWeek; // ✅ Optional parameter for initial week
+
+  const PregnancyJourneyScreen({Key? key, this.initialWeek}) : super(key: key);
+
   @override
   _PregnancyJourneyScreenState createState() => _PregnancyJourneyScreenState();
 }
@@ -23,6 +28,32 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 
   void _autoDetectCurrentWeek() async {
     try {
+      if (widget.initialWeek != null && widget.initialWeek! > 0) {
+        print('Using initial week from home: ${widget.initialWeek}');
+        setState(() {
+          _currentWeek = widget.initialWeek!.clamp(1, 40);
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // ✅ Directly PregnancyData से current week लें
+      PregnancyData data = await PregnancyData.loadFromPrefs();
+
+      print('Loaded pregnancy data:');
+      print('Last Period Date: ${data.lastPeriodDate}');
+      print('Due Date: ${data.dueDate}');
+      print('Current Week from data: ${data.currentWeekNumber}');
+
+      if (data.lastPeriodDate != null) {
+        setState(() {
+          _currentWeek = data.currentWeekNumber.clamp(1, 40);
+          _isLoading = false;
+        });
+        print('Using week from pregnancy data: $_currentWeek');
+        return;
+      }
+
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         final userDoc = await FirebaseFirestore.instance
@@ -31,8 +62,8 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
             .get();
 
         if (userDoc.exists) {
-          final data = userDoc.data();
-          final lastPeriodDate = data?['lastPeriodDate'];
+          final userData = userDoc.data();
+          final lastPeriodDate = userData?['lastPeriodDate'];
 
           if (lastPeriodDate != null) {
             DateTime lmpDate;
@@ -51,6 +82,7 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
               _currentWeek = currentWeek.clamp(1, 40);
               _isLoading = false;
             });
+            print('Using week from Firestore: $_currentWeek');
             return;
           }
         }
@@ -59,6 +91,8 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
       print('Error detecting current week: $e');
     }
 
+    // ✅ Final fallback
+    print('Using default week 1');
     setState(() {
       _currentWeek = 1;
       _isLoading = false;
@@ -82,6 +116,7 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
     super.dispose();
   }
 
+  // Complete week data (same as your original)
   final List<Map<String, dynamic>> weekData = [
     {
       "week": "Week 1",
@@ -644,6 +679,7 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
       "imageUrl": "https://via.placeholder.com/300x200/B0BEC5/FFFFFF?text=Week+40"
     },
   ];
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -655,6 +691,7 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
       );
     }
 
+    // Ensure _currentWeek is within bounds
     if (_currentWeek < 1) {
       _currentWeek = 1;
     } else if (_currentWeek > weekData.length) {
@@ -980,7 +1017,7 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
                   Container(
                     padding: EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.orange[50]?.withOpacity(0.5),
+                      color: Colors.orange[50]!.withOpacity(0.5),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: Colors.orange[100]!),
                     ),
@@ -1097,8 +1134,9 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
   }
 }
 
-
-// / import 'package:flutter/material.dart';
+// import 'package:flutter/material.dart';
+// import 'package:cloud_firestore/cloud_firestore.dart';
+// import 'package:firebase_auth/firebase_auth.dart';
 //
 // class PregnancyJourneyScreen extends StatefulWidget {
 //   @override
@@ -1106,11 +1144,80 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 // }
 //
 // class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
-//   int _currentWeek = 1; // Start with Week 1
+//   int _currentWeek = 1;
 //   final ScrollController _weekScrollController = ScrollController();
+//   bool _isLoading = true;
 //
-//   // Updated data structure with new content
-//   // Complete data for all 40 weeks
+//   @override
+//   void initState() {
+//     super.initState();
+//     _autoDetectCurrentWeek();
+//     WidgetsBinding.instance.addPostFrameCallback((_) {
+//       _scrollToCurrentWeek();
+//     });
+//   }
+//
+//   void _autoDetectCurrentWeek() async {
+//     try {
+//       final user = FirebaseAuth.instance.currentUser;
+//       if (user != null) {
+//         final userDoc = await FirebaseFirestore.instance
+//             .collection('users')
+//             .doc(user.uid)
+//             .get();
+//
+//         if (userDoc.exists) {
+//           final data = userDoc.data();
+//           final lastPeriodDate = data?['lastPeriodDate'];
+//
+//           if (lastPeriodDate != null) {
+//             DateTime lmpDate;
+//             if (lastPeriodDate is Timestamp) {
+//               lmpDate = lastPeriodDate.toDate();
+//             } else if (lastPeriodDate is String) {
+//               lmpDate = DateTime.parse(lastPeriodDate);
+//             } else {
+//               lmpDate = DateTime.now();
+//             }
+//
+//             final daysSinceLMP = DateTime.now().difference(lmpDate).inDays;
+//             final currentWeek = (daysSinceLMP / 7).floor() + 1;
+//
+//             setState(() {
+//               _currentWeek = currentWeek.clamp(1, 40);
+//               _isLoading = false;
+//             });
+//             return;
+//           }
+//         }
+//       }
+//     } catch (e) {
+//       print('Error detecting current week: $e');
+//     }
+//
+//     setState(() {
+//       _currentWeek = 1;
+//       _isLoading = false;
+//     });
+//   }
+//
+//   void _scrollToCurrentWeek() {
+//     if (_weekScrollController.hasClients) {
+//       final double scrollPosition = (_currentWeek - 3) * 48.0;
+//       _weekScrollController.animateTo(
+//         scrollPosition.clamp(0, _weekScrollController.position.maxScrollExtent),
+//         duration: Duration(milliseconds: 500),
+//         curve: Curves.easeInOut,
+//       );
+//     }
+//   }
+//
+//   @override
+//   void dispose() {
+//     _weekScrollController.dispose();
+//     super.dispose();
+//   }
+//
 //   final List<Map<String, dynamic>> weekData = [
 //     {
 //       "week": "Week 1",
@@ -1673,44 +1780,24 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 //       "imageUrl": "https://via.placeholder.com/300x200/B0BEC5/FFFFFF?text=Week+40"
 //     },
 //   ];
-//
-//   @override
-//   void initState() {
-//     super.initState();
-//     // Auto-detect current week based on pregnancy progress
-//     _autoDetectCurrentWeek();
-//     // Scroll to current week after build
-//     WidgetsBinding.instance.addPostFrameCallback((_) {
-//       _scrollToCurrentWeek();
-//     });
-//   }
-//
-//   void _autoDetectCurrentWeek() {
-//     // TODO: Replace with actual pregnancy date calculation
-//     // For now, setting to week 10 as example
-//     _currentWeek = 10; // Change this to dynamic calculation
-//   }
-//
-//   void _scrollToCurrentWeek() {
-//     final double scrollPosition = (_currentWeek - 1) * 48.0; // 48 = width + margin
-//     _weekScrollController.animateTo(
-//       scrollPosition,
-//       duration: Duration(milliseconds: 500),
-//       curve: Curves.easeInOut,
-//     );
-//   }
-//
 //   @override
 //   Widget build(BuildContext context) {
-//     // Ensure _currentWeek is within the bounds of weekData
+//     if (_isLoading) {
+//       return Scaffold(
+//         backgroundColor: Colors.white,
+//         body: Center(
+//           child: CircularProgressIndicator(color: Color(0xFFB794F4)),
+//         ),
+//       );
+//     }
+//
 //     if (_currentWeek < 1) {
 //       _currentWeek = 1;
 //     } else if (_currentWeek > weekData.length) {
 //       _currentWeek = weekData.length;
 //     }
 //
-//     // Get the data for the current week
-//     final currentWeekData = weekData[_currentWeek - 1]; // -1 because list is 0-indexed
+//     final currentWeekData = weekData[_currentWeek - 1];
 //
 //     return Scaffold(
 //       backgroundColor: Colors.white,
@@ -1732,7 +1819,7 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 //       ),
 //       body: Column(
 //         children: [
-//           // ENHANCED: Top Week Navigation Bar
+//           // Enhanced Top Week Navigation Bar
 //           Container(
 //             padding: EdgeInsets.symmetric(vertical: 16.0, horizontal: 12.0),
 //             decoration: BoxDecoration(
@@ -1797,9 +1884,9 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 //
 //                 SizedBox(height: 16),
 //
-//                 // ENHANCED: Horizontal Week Navigation (1-40)
+//                 // Horizontal Week Navigation (1-40)
 //                 Container(
-//                   height: 60,
+//                   height: 110,
 //                   child: Column(
 //                     children: [
 //                       // Week Numbers 1-40
@@ -1855,7 +1942,7 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 //                                         width: 6,
 //                                         height: 6,
 //                                         decoration: BoxDecoration(
-//                                           color: Colors.white,
+//                                           color: isSelected ? Colors.white : Color(0xFFB794F4),
 //                                           shape: BoxShape.circle,
 //                                         ),
 //                                       ),
@@ -1869,7 +1956,7 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 //                       ),
 //
 //                       // Navigation Arrows
-//                       SizedBox(height: 8),
+//                       SizedBox(height: 12),
 //                       Padding(
 //                         padding: EdgeInsets.symmetric(horizontal: 16),
 //                         child: Row(
@@ -1904,7 +1991,7 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 //                                 border: Border.all(color: Colors.grey[300]!),
 //                               ),
 //                               child: Text(
-//                                 'Week $_currentWeek of 40',
+//                                 'Week $_currentWeek of ${weekData.length}',
 //                                 style: TextStyle(
 //                                   fontSize: 12,
 //                                   fontWeight: FontWeight.w600,
@@ -1921,8 +2008,8 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 //                                 });
 //                                 _scrollToCurrentWeek();
 //                               } : null,
-//                               icon: Icon(Icons.arrow_forward_ios, size: 16),
 //                               label: Text('Next'),
+//                               icon: Icon(Icons.arrow_forward_ios, size: 16),
 //                               style: ElevatedButton.styleFrom(
 //                                 backgroundColor: Color(0xFFB794F4),
 //                                 foregroundColor: Colors.white,
@@ -2147,7 +2234,7 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 // }
 //
 //
-// // import 'package:flutter/material.dart';
+// // / import 'package:flutter/material.dart';
 // //
 // // class PregnancyJourneyScreen extends StatefulWidget {
 // //   @override
@@ -2156,6 +2243,7 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 // //
 // // class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 // //   int _currentWeek = 1; // Start with Week 1
+// //   final ScrollController _weekScrollController = ScrollController();
 // //
 // //   // Updated data structure with new content
 // //   // Complete data for all 40 weeks
@@ -2721,6 +2809,33 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 // //       "imageUrl": "https://via.placeholder.com/300x200/B0BEC5/FFFFFF?text=Week+40"
 // //     },
 // //   ];
+// //
+// //   @override
+// //   void initState() {
+// //     super.initState();
+// //     // Auto-detect current week based on pregnancy progress
+// //     _autoDetectCurrentWeek();
+// //     // Scroll to current week after build
+// //     WidgetsBinding.instance.addPostFrameCallback((_) {
+// //       _scrollToCurrentWeek();
+// //     });
+// //   }
+// //
+// //   void _autoDetectCurrentWeek() {
+// //     // TODO: Replace with actual pregnancy date calculation
+// //     // For now, setting to week 10 as example
+// //     _currentWeek = 10; // Change this to dynamic calculation
+// //   }
+// //
+// //   void _scrollToCurrentWeek() {
+// //     final double scrollPosition = (_currentWeek - 1) * 48.0; // 48 = width + margin
+// //     _weekScrollController.animateTo(
+// //       scrollPosition,
+// //       duration: Duration(milliseconds: 500),
+// //       curve: Curves.easeInOut,
+// //     );
+// //   }
+// //
 // //   @override
 // //   Widget build(BuildContext context) {
 // //     // Ensure _currentWeek is within the bounds of weekData
@@ -2736,120 +2851,234 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 // //     return Scaffold(
 // //       backgroundColor: Colors.white,
 // //       appBar: AppBar(
-// //         toolbarHeight: 0,
+// //         title: Text(
+// //           'Pregnancy Journey',
+// //           style: TextStyle(
+// //             color: Colors.white,
+// //             fontWeight: FontWeight.bold,
+// //             fontSize: 20,
+// //           ),
+// //         ),
+// //         backgroundColor: Color(0xFFB794F4),
 // //         elevation: 0,
-// //         backgroundColor: Colors.white,
+// //         leading: IconButton(
+// //           icon: Icon(Icons.arrow_back, color: Colors.white),
+// //           onPressed: () => Navigator.pop(context),
+// //         ),
 // //       ),
 // //       body: Column(
 // //         children: [
-// //           // Top section: Week selection and trimester
+// //           // ENHANCED: Top Week Navigation Bar
 // //           Container(
-// //             padding: EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
+// //             padding: EdgeInsets.symmetric(vertical: 16.0, horizontal: 12.0),
 // //             decoration: BoxDecoration(
 // //               color: Colors.white,
 // //               boxShadow: [
 // //                 BoxShadow(
-// //                   color: Colors.grey.withOpacity(0.1),
+// //                   color: Colors.grey.withOpacity(0.2),
 // //                   spreadRadius: 1,
-// //                   blurRadius: 3,
+// //                   blurRadius: 4,
 // //                   offset: Offset(0, 2),
 // //                 ),
 // //               ],
 // //             ),
 // //             child: Column(
 // //               children: [
-// //                 Row(
-// //                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-// //                   children: [
-// //                     Text(
-// //                       currentWeekData["week"]!,
-// //                       style: TextStyle(
-// //                         fontSize: 20,
-// //                         fontWeight: FontWeight.bold,
-// //                         color: Colors.black87,
-// //                       ),
-// //                     ),
-// //                     Text(
-// //                       currentWeekData["trimester"]!,
-// //                       style: TextStyle(
-// //                         fontSize: 16,
-// //                         color: Colors.grey[700],
-// //                       ),
-// //                     ),
-// //                   ],
-// //                 ),
-// //                 SizedBox(height: 10),
-// //                 SizedBox(
-// //                   height: 40,
-// //                   child: ListView.builder(
-// //                     scrollDirection: Axis.horizontal,
-// //                     itemCount: weekData.length,
-// //                     itemBuilder: (context, index) {
-// //                       final weekNumber = index + 1;
-// //                       final isSelected = weekNumber == _currentWeek;
-// //                       return GestureDetector(
-// //                         onTap: () {
-// //                           setState(() {
-// //                             _currentWeek = weekNumber;
-// //                           });
-// //                         },
-// //                         child: Container(
-// //                           width: 40,
-// //                           margin: EdgeInsets.symmetric(horizontal: 4),
-// //                           decoration: BoxDecoration(
-// //                             color: isSelected ? Colors.purple[600] : Colors.grey[200],
-// //                             borderRadius: BorderRadius.circular(20),
-// //                           ),
-// //                           alignment: Alignment.center,
-// //                           child: Text(
-// //                             '$weekNumber',
+// //                 // Current Week and Trimester Info
+// //                 Container(
+// //                   padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+// //                   child: Row(
+// //                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+// //                     children: [
+// //                       Column(
+// //                         crossAxisAlignment: CrossAxisAlignment.start,
+// //                         children: [
+// //                           Text(
+// //                             currentWeekData["week"]!,
 // //                             style: TextStyle(
-// //                               color: isSelected ? Colors.white : Colors.black87,
-// //                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+// //                               fontSize: 22,
+// //                               fontWeight: FontWeight.bold,
+// //                               color: Color(0xFFB794F4),
 // //                             ),
 // //                           ),
+// //                           SizedBox(height: 4),
+// //                           Text(
+// //                             currentWeekData["trimester"]!,
+// //                             style: TextStyle(
+// //                               fontSize: 14,
+// //                               color: Colors.grey[600],
+// //                               fontWeight: FontWeight.w500,
+// //                             ),
+// //                           ),
+// //                         ],
+// //                       ),
+// //                       Container(
+// //                         padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+// //                         decoration: BoxDecoration(
+// //                           color: Color(0xFFB794F4).withOpacity(0.1),
+// //                           borderRadius: BorderRadius.circular(20),
 // //                         ),
-// //                       );
-// //                     },
+// //                         child: Text(
+// //                           "${currentWeekData["weeksRemaining"]} weeks to go",
+// //                           style: TextStyle(
+// //                             fontSize: 12,
+// //                             color: Color(0xFFB794F4),
+// //                             fontWeight: FontWeight.w600,
+// //                           ),
+// //                         ),
+// //                       ),
+// //                     ],
 // //                   ),
 // //                 ),
-// //                 SizedBox(height: 10),
-// //                 Row(
-// //                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-// //                   children: [
-// //                     IconButton(
-// //                       icon: Icon(Icons.arrow_back_ios, color: Colors.grey[700]),
-// //                       onPressed: () {
-// //                         setState(() {
-// //                           if (_currentWeek > 1) {
-// //                             _currentWeek--;
-// //                           }
-// //                         });
-// //                       },
-// //                     ),
-// //                     Text(
-// //                       "${currentWeekData["weeksRemaining"]} weeks remaining",
-// //                       style: TextStyle(
-// //                         fontSize: 14,
-// //                         color: Colors.grey[600],
-// //                         fontWeight: FontWeight.w500,
+// //
+// //                 SizedBox(height: 16),
+// //
+// //                 // ENHANCED: Horizontal Week Navigation (1-40)
+// //                 Container(
+// //                   height: 60,
+// //                   child: Column(
+// //                     children: [
+// //                       // Week Numbers 1-40
+// //                       Expanded(
+// //                         child: ListView.builder(
+// //                           controller: _weekScrollController,
+// //                           scrollDirection: Axis.horizontal,
+// //                           itemCount: weekData.length,
+// //                           padding: EdgeInsets.symmetric(horizontal: 8),
+// //                           itemBuilder: (context, index) {
+// //                             final weekNumber = index + 1;
+// //                             final isSelected = weekNumber == _currentWeek;
+// //                             final isCurrentWeek = weekNumber == _currentWeek;
+// //
+// //                             return GestureDetector(
+// //                               onTap: () {
+// //                                 setState(() {
+// //                                   _currentWeek = weekNumber;
+// //                                 });
+// //                               },
+// //                               child: Container(
+// //                                 width: 40,
+// //                                 margin: EdgeInsets.symmetric(horizontal: 4),
+// //                                 decoration: BoxDecoration(
+// //                                   color: isSelected ? Color(0xFFB794F4) : Colors.grey[100],
+// //                                   borderRadius: BorderRadius.circular(12),
+// //                                   border: isCurrentWeek
+// //                                       ? Border.all(color: Color(0xFFB794F4), width: 2)
+// //                                       : null,
+// //                                   boxShadow: isSelected ? [
+// //                                     BoxShadow(
+// //                                       color: Color(0xFFB794F4).withOpacity(0.3),
+// //                                       blurRadius: 8,
+// //                                       offset: Offset(0, 2),
+// //                                     )
+// //                                   ] : null,
+// //                                 ),
+// //                                 alignment: Alignment.center,
+// //                                 child: Column(
+// //                                   mainAxisAlignment: MainAxisAlignment.center,
+// //                                   children: [
+// //                                     Text(
+// //                                       '$weekNumber',
+// //                                       style: TextStyle(
+// //                                         color: isSelected ? Colors.white : Colors.grey[700],
+// //                                         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+// //                                         fontSize: 14,
+// //                                       ),
+// //                                     ),
+// //                                     if (isCurrentWeek) ...[
+// //                                       SizedBox(height: 2),
+// //                                       Container(
+// //                                         width: 6,
+// //                                         height: 6,
+// //                                         decoration: BoxDecoration(
+// //                                           color: Colors.white,
+// //                                           shape: BoxShape.circle,
+// //                                         ),
+// //                                       ),
+// //                                     ],
+// //                                   ],
+// //                                 ),
+// //                               ),
+// //                             );
+// //                           },
+// //                         ),
 // //                       ),
-// //                     ),
-// //                     IconButton(
-// //                       icon: Icon(Icons.arrow_forward_ios, color: Colors.grey[700]),
-// //                       onPressed: () {
-// //                         setState(() {
-// //                           if (_currentWeek < weekData.length) {
-// //                             _currentWeek++;
-// //                           }
-// //                         });
-// //                       },
-// //                     ),
-// //                   ],
+// //
+// //                       // Navigation Arrows
+// //                       SizedBox(height: 8),
+// //                       Padding(
+// //                         padding: EdgeInsets.symmetric(horizontal: 16),
+// //                         child: Row(
+// //                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+// //                           children: [
+// //                             // Previous Week Button
+// //                             ElevatedButton.icon(
+// //                               onPressed: _currentWeek > 1 ? () {
+// //                                 setState(() {
+// //                                   _currentWeek--;
+// //                                 });
+// //                                 _scrollToCurrentWeek();
+// //                               } : null,
+// //                               icon: Icon(Icons.arrow_back_ios, size: 16),
+// //                               label: Text('Previous'),
+// //                               style: ElevatedButton.styleFrom(
+// //                                 backgroundColor: Color(0xFFB794F4),
+// //                                 foregroundColor: Colors.white,
+// //                                 padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+// //                                 shape: RoundedRectangleBorder(
+// //                                   borderRadius: BorderRadius.circular(20),
+// //                                 ),
+// //                               ),
+// //                             ),
+// //
+// //                             // Week Indicator
+// //                             Container(
+// //                               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+// //                               decoration: BoxDecoration(
+// //                                 color: Colors.grey[50],
+// //                                 borderRadius: BorderRadius.circular(20),
+// //                                 border: Border.all(color: Colors.grey[300]!),
+// //                               ),
+// //                               child: Text(
+// //                                 'Week $_currentWeek of 40',
+// //                                 style: TextStyle(
+// //                                   fontSize: 12,
+// //                                   fontWeight: FontWeight.w600,
+// //                                   color: Colors.grey[700],
+// //                                 ),
+// //                               ),
+// //                             ),
+// //
+// //                             // Next Week Button
+// //                             ElevatedButton.icon(
+// //                               onPressed: _currentWeek < weekData.length ? () {
+// //                                 setState(() {
+// //                                   _currentWeek++;
+// //                                 });
+// //                                 _scrollToCurrentWeek();
+// //                               } : null,
+// //                               icon: Icon(Icons.arrow_forward_ios, size: 16),
+// //                               label: Text('Next'),
+// //                               style: ElevatedButton.styleFrom(
+// //                                 backgroundColor: Color(0xFFB794F4),
+// //                                 foregroundColor: Colors.white,
+// //                                 padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+// //                                 shape: RoundedRectangleBorder(
+// //                                   borderRadius: BorderRadius.circular(20),
+// //                                 ),
+// //                               ),
+// //                             ),
+// //                           ],
+// //                         ),
+// //                       ),
+// //                     ],
+// //                   ),
 // //                 ),
 // //               ],
 // //             ),
 // //           ),
+// //
+// //           // Content Section
 // //           Expanded(
 // //             child: SingleChildScrollView(
 // //               padding: EdgeInsets.all(16.0),
@@ -2861,11 +3090,11 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 // //                     height: 200,
 // //                     width: double.infinity,
 // //                     decoration: BoxDecoration(
-// //                       color: Colors.grey[300],
+// //                       color: Colors.grey[100],
 // //                       borderRadius: BorderRadius.circular(15),
 // //                       boxShadow: [
 // //                         BoxShadow(
-// //                           color: Colors.grey.withOpacity(0.2),
+// //                           color: Colors.grey.withOpacity(0.1),
 // //                           spreadRadius: 2,
 // //                           blurRadius: 5,
 // //                           offset: Offset(0, 3),
@@ -2878,8 +3107,32 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 // //                         currentWeekData["imageUrl"]!,
 // //                         fit: BoxFit.cover,
 // //                         errorBuilder: (context, error, stackTrace) {
-// //                           return Center(
-// //                             child: Icon(Icons.broken_image, size: 50, color: Colors.grey[600]),
+// //                           return Container(
+// //                             decoration: BoxDecoration(
+// //                               gradient: LinearGradient(
+// //                                 colors: [Color(0xFFB794F4).withOpacity(0.3), Color(0xFF9F7AEA).withOpacity(0.3)],
+// //                                 begin: Alignment.topLeft,
+// //                                 end: Alignment.bottomRight,
+// //                               ),
+// //                               borderRadius: BorderRadius.circular(15),
+// //                             ),
+// //                             child: Center(
+// //                               child: Column(
+// //                                 mainAxisAlignment: MainAxisAlignment.center,
+// //                                 children: [
+// //                                   Icon(Icons.pregnant_woman, size: 50, color: Color(0xFFB794F4)),
+// //                                   SizedBox(height: 8),
+// //                                   Text(
+// //                                     currentWeekData["week"]!,
+// //                                     style: TextStyle(
+// //                                       fontSize: 18,
+// //                                       fontWeight: FontWeight.bold,
+// //                                       color: Color(0xFFB794F4),
+// //                                     ),
+// //                                   ),
+// //                                 ],
+// //                               ),
+// //                             ),
 // //                           );
 // //                         },
 // //                       ),
@@ -2941,14 +3194,14 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 // //                   Container(
 // //                     padding: EdgeInsets.all(12),
 // //                     decoration: BoxDecoration(
-// //                       color: Colors.purple[50]?.withOpacity(0.5),
+// //                       color: Color(0xFFB794F4).withOpacity(0.1),
 // //                       borderRadius: BorderRadius.circular(10),
-// //                       border: Border.all(color: Colors.purple[100]!),
+// //                       border: Border.all(color: Color(0xFFB794F4).withOpacity(0.3)),
 // //                     ),
 // //                     child: Row(
 // //                       crossAxisAlignment: CrossAxisAlignment.start,
 // //                       children: [
-// //                         Icon(Icons.lightbulb_outline, color: Colors.purple[600], size: 24),
+// //                         Icon(Icons.lightbulb_outline, color: Color(0xFFB794F4), size: 24),
 // //                         SizedBox(width: 10),
 // //                         Expanded(
 // //                           child: Text(
@@ -2992,8 +3245,6 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 // //               ),
 // //             ),
 // //           ),
-// //           // Bottom Navigation Bar
-// //           _buildBottomNavBar(),
 // //         ],
 // //       ),
 // //     );
@@ -3003,9 +3254,9 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 // //     return Text(
 // //       title,
 // //       style: TextStyle(
-// //         fontSize: 22,
+// //         fontSize: 20,
 // //         fontWeight: FontWeight.bold,
-// //         color: Colors.purple[800],
+// //         color: Color(0xFFB794F4),
 // //       ),
 // //     );
 // //   }
@@ -3014,7 +3265,7 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 // //     return Row(
 // //       crossAxisAlignment: CrossAxisAlignment.start,
 // //       children: [
-// //         Icon(icon, color: Colors.purple[600], size: 24),
+// //         Icon(icon, color: Color(0xFFB794F4), size: 24),
 // //         SizedBox(width: 8),
 // //         Expanded(
 // //           child: Text(
@@ -3022,26 +3273,11 @@ class _PregnancyJourneyScreenState extends State<PregnancyJourneyScreen> {
 // //             style: TextStyle(
 // //               fontSize: 16,
 // //               color: Colors.grey[800],
+// //               height: 1.4,
 // //             ),
 // //           ),
 // //         ),
 // //       ],
-// //     );
-// //   }
-// //
-// //   Widget _buildBottomNavBar() {
-// //     return Container(
-// //       decoration: BoxDecoration(
-// //         color: Colors.white,
-// //         boxShadow: [
-// //           BoxShadow(
-// //             color: Colors.grey.withOpacity(0.1),
-// //             spreadRadius: 2,
-// //             blurRadius: 5,
-// //             offset: Offset(0, -3),
-// //           ),
-// //         ],
-// //       ),
 // //     );
 // //   }
 // // }

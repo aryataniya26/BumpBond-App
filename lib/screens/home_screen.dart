@@ -138,13 +138,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 Text(
                   '$greeting, $userName!',
                   style: const TextStyle(
-                    fontSize: 28,
+                    fontSize: 27,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF1F2937),
                   ),
                 ),
-                const SizedBox(width: 8),
-                const Text('👋', style: TextStyle(fontSize: 28)),
+                const SizedBox(width: 4),
+                const Text('👋', style: TextStyle(fontSize: 24)),
               ],
             ),
 
@@ -171,7 +171,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: const Icon(
                   Icons.notifications,
                   color: Color(0xFFB794F4),
-                  size: 27,
+                  size: 26,
                 ),
               ),
             ),
