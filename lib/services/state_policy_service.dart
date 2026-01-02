@@ -33,7 +33,7 @@ For each scheme, provide:
     final data = jsonDecode(response.body);
     final text = data['choices'][0]['message']['content'] as String;
 
-    // 👇 Convert text into list of schemes (simple parsing)
+    //  Convert text into list of schemes (simple parsing)
     final List<Map<String, String>> schemes = [];
     final lines = text.split('\n').where((line) => line.trim().isNotEmpty);
 

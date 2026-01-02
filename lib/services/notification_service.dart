@@ -1,113 +1,38 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// Background Message Handler
+// ✅ FIXED: Single background handler
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Firebase initialize karo
-  try {
-    // Firebase already initialized hai, direct notification show karo
-  } catch (e) {
-    print('Background Firebase init error: $e');
-  }
-
-  print('🔔 Background Message: ${message.notification?.title}');
-
-  // Background notification show karega
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-  FlutterLocalNotificationsPlugin();
-
-  // Initialize local notifications for background
-  const AndroidInitializationSettings androidSettings =
-  AndroidInitializationSettings('@mipmap/ic_launcher');
-  const DarwinInitializationSettings iosSettings =
-  DarwinInitializationSettings();
-  const InitializationSettings initSettings = InitializationSettings(
-    android: androidSettings,
-    iOS: iosSettings,
-  );
-
-  await flutterLocalNotificationsPlugin.initialize(initSettings);
-
-  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-    'bump_bond_channel',
-    'Bump Bond Notifications',
-    channelDescription: 'Pregnancy tracking notifications',
-    importance: Importance.high,
-    priority: Priority.high,
-  );
-
-  const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
-    presentAlert: true,
-    presentBadge: true,
-    presentSound: true,
-  );
-
-  const NotificationDetails notificationDetails = NotificationDetails(
-    android: androidDetails,
-    iOS: iosDetails,
-  );
-
-  await flutterLocalNotificationsPlugin.show(
-    DateTime.now().millisecondsSinceEpoch ~/ 1000,
-    message.notification?.title ?? 'Bump Bond',
-    message.notification?.body ?? 'New notification',
-    notificationDetails,
-  );
-
-  // Background mein bhi notification save karo
-  await _saveNotificationInBackground(
-    title: message.notification?.title ?? 'New Notification',
-    body: message.notification?.body ?? '',
-  );
-}
-
-// Background ke liye alag save function
-Future<void> _saveNotificationInBackground({
-  required String title,
-  required String body,
-}) async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> notifications = prefs.getStringList('notifications') ?? [];
-
-    final notification = {
-      'title': title,
-      'body': body,
-      'time': DateTime.now().toIso8601String(),
-    };
-
-    notifications.insert(0, json.encode(notification));
-
-    if (notifications.length > 50) {
-      notifications = notifications.sublist(0, 50);
-    }
-
-    await prefs.setStringList('notifications', notifications);
-  } catch (e) {
-    print('❌ Error saving background notification: $e');
-  }
+  await NotificationService._handleBackgroundMessage(message);
 }
 
 class NotificationService {
   static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
-  static final FlutterLocalNotificationsPlugin _localNotifications =
-  FlutterLocalNotificationsPlugin();
+  static final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  static bool _isInitialized = false;
+  static String? _lastNotificationId;
+  static DateTime? _lastNotificationTime;
 
-  // ✅ Check if user has enabled notifications
+  // ✅ FIXED: Single callback
+  static Function(Map<String, dynamic>)? _onNotificationTapCallback;
+  static void setNotificationTapCallback(Function(Map<String, dynamic>) callback) {
+    _onNotificationTapCallback = callback;
+  }
+
   static Future<bool> areNotificationsEnabled() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getBool('notifications_enabled') ?? true; // Default true
+      return prefs.getBool('notifications_enabled') ?? true;
     } catch (e) {
       print('❌ Error checking notification status: $e');
       return true;
     }
   }
 
-  // ✅ Save notification preference
   static Future<void> setNotificationsEnabled(bool enabled) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -123,7 +48,6 @@ class NotificationService {
     }
   }
 
-  // ✅ Subscribe to topics for automated notifications
   static Future<void> _subscribeToTopics() async {
     try {
       await _firebaseMessaging.subscribeToTopic('all_users');
@@ -133,7 +57,6 @@ class NotificationService {
     }
   }
 
-  // ✅ Unsubscribe from all topics
   static Future<void> _unsubscribeFromTopics() async {
     try {
       await _firebaseMessaging.unsubscribeFromTopic('all_users');
@@ -143,10 +66,15 @@ class NotificationService {
     }
   }
 
-  // ✅ Initialize Notifications
+  // ✅ FIXED: Initialize only once
   static Future<void> initialize() async {
+    if (_isInitialized) {
+      print('⚠️ Notification service already initialized');
+      return;
+    }
+
     try {
-      // Request Permission
+      // Request permission
       NotificationSettings settings = await _firebaseMessaging.requestPermission(
         alert: true,
         badge: true,
@@ -155,8 +83,6 @@ class NotificationService {
 
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
         print('✅ User granted notification permission');
-
-        // ✅ AUTOMATICALLY SUBSCRIBE ALL USERS TO TOPICS
         final notificationsEnabled = await areNotificationsEnabled();
         if (notificationsEnabled) {
           await _subscribeToTopics();
@@ -166,106 +92,243 @@ class NotificationService {
         await setNotificationsEnabled(false);
       }
 
-      // Get FCM Token
+      // Get and save token
       String? token = await _firebaseMessaging.getToken();
       print('📱 FCM Token: $token');
-
-      // Save token to SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('fcm_token', token ?? '');
 
-      // Initialize Local Notifications
-      const AndroidInitializationSettings androidSettings =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
-
-      const DarwinInitializationSettings iosSettings =
-      DarwinInitializationSettings(
+      // Initialize local notifications
+      const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
         requestSoundPermission: true,
       );
-
       const InitializationSettings initSettings = InitializationSettings(
         android: androidSettings,
         iOS: iosSettings,
       );
 
-      await _localNotifications.initialize(initSettings);
+      await _localNotifications.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: _handleNotificationTap,
+      );
 
-      // Create notification channel
-      await _createNotificationChannel();
+      await _createNotificationChannels();
 
-      // Listen to foreground messages
-      FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+      // ✅ FIXED: Single stream listeners
+      _setupMessageListeners();
 
-      // Handle background message tap
-      FirebaseMessaging.onMessageOpenedApp.listen(_handleBackgroundMessageTap);
-
-      // Set background handler
-      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-
+      _isInitialized = true;
       print('✅ Notification service initialized successfully');
-
     } catch (e) {
       print('❌ Notification initialization error: $e');
     }
   }
 
-  // ✅ Create Notification Channel
-  static Future<void> _createNotificationChannel() async {
+  static void _setupMessageListeners() {
+    // Foreground messages
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print('📩 Foreground Message: ${message.notification?.title}');
+      _handleForegroundMessage(message);
+    });
+
+    // App opened from background
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print('📬 App opened from background: ${message.notification?.title}');
+      _handleNotificationTapFromData(message.data);
+    });
+
+    // App opened from terminated state
+    FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
+      if (message != null) {
+        print('🚀 App opened from terminated state');
+        _handleNotificationTapFromData(message.data);
+      }
+    });
+
+    // Background handler
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  }
+
+  static Future<void> _handleBackgroundMessage(RemoteMessage message) async {
+    print('📢 Background Message: ${message.notification?.title}');
+
+    // Prevent duplicate processing
+    final messageId = message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    if (_lastNotificationId == messageId) {
+      print('⚠️ Duplicate background message ignored: $messageId');
+      return;
+    }
+
+    _lastNotificationId = messageId;
+
+    // Save notification
+    await _saveNotification(
+      title: message.notification?.title ?? 'Bump Bond',
+      body: message.notification?.body ?? '',
+      data: message.data,
+    );
+
+    // Show notification
+    await _showLocalNotification(
+      title: message.notification?.title ?? 'Bump Bond',
+      body: message.notification?.body ?? 'New notification',
+      data: message.data,
+    );
+  }
+
+  static Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    final messageId = message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString();
+
+    // Prevent duplicate processing within 2 seconds
+    if (_lastNotificationId == messageId ||
+        (_lastNotificationTime != null &&
+            DateTime.now().difference(_lastNotificationTime!).inSeconds < 2)) {
+      print('⚠️ Duplicate foreground message ignored: $messageId');
+      return;
+    }
+
+    _lastNotificationId = messageId;
+    _lastNotificationTime = DateTime.now();
+
+    // Save notification
+    await _saveNotification(
+      title: message.notification?.title ?? 'Bump Bond',
+      body: message.notification?.body ?? '',
+      data: message.data,
+    );
+
+    // Show notification
+    await _showLocalNotification(
+      title: message.notification?.title ?? 'Bump Bond',
+      body: message.notification?.body ?? 'New notification',
+      data: message.data,
+    );
+  }
+
+  static void _handleNotificationTap(NotificationResponse response) {
+    print('🔔 Notification Tapped: ${response.payload}');
+
+    if (response.payload != null) {
+      try {
+        final data = json.decode(response.payload!);
+        _handleNotificationTapFromData(data);
+      } catch (e) {
+        print('❌ Error parsing notification payload: $e');
+      }
+    }
+  }
+
+  static void _handleNotificationTapFromData(Map<String, dynamic> data) {
+    print('📍 Handling notification tap data: $data');
+
+    // Save for navigation
+    _saveNotificationTapData(data);
+
+    // Trigger callback
+    if (_onNotificationTapCallback != null) {
+      _onNotificationTapCallback!(data);
+    }
+  }
+
+  static Future<void> _saveNotificationTapData(Map<String, dynamic> data) async {
     try {
-      const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('last_notification_data', json.encode(data));
+      print('💾 Notification tap data saved');
+    } catch (e) {
+      print('❌ Error saving notification tap data: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getLastNotificationData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final data = prefs.getString('last_notification_data');
+      if (data != null) {
+        return json.decode(data) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('❌ Error getting last notification data: $e');
+    }
+    return null;
+  }
+
+  static Future<void> _createNotificationChannels() async {
+    try {
+      // Main channel
+      const AndroidNotificationChannel mainChannel = AndroidNotificationChannel(
         'bump_bond_channel',
         'Bump Bond Notifications',
         description: 'Pregnancy tracking notifications',
         importance: Importance.high,
       );
 
+      // Medication channel
+      const AndroidNotificationChannel medicationChannel = AndroidNotificationChannel(
+        'medication_reminders',
+        'Medication Reminders',
+        description: 'Daily medication reminder notifications',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFFB794F4),
+      );
+
+      // Baby chat channel
+      const AndroidNotificationChannel babyChannel = AndroidNotificationChannel(
+        'baby_chat_channel',
+        'Baby Messages',
+        description: 'Messages from your baby',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+      );
+
       final androidPlugin = _localNotifications
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
       if (androidPlugin != null) {
-        await androidPlugin.createNotificationChannel(channel);
+        await androidPlugin.createNotificationChannel(mainChannel);
+        await androidPlugin.createNotificationChannel(medicationChannel);
+        await androidPlugin.createNotificationChannel(babyChannel);
+        print('✅ All notification channels created');
       }
     } catch (e) {
-      print('❌ Error creating notification channel: $e');
+      print('❌ Error creating notification channels: $e');
     }
   }
 
-  // ✅ Handle Foreground Messages
-  static Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    print('📩 Foreground Notification: ${message.notification?.title}');
-
-    // Save to local storage
-    await _saveNotification(
-      title: message.notification?.title ?? 'New Notification',
-      body: message.notification?.body ?? '',
-    );
-
-    // Show local notification
-    await _showLocalNotification(
-      title: message.notification?.title ?? 'Bump Bond',
-      body: message.notification?.body ?? 'You have a new notification',
-    );
-  }
-
-  // ✅ Handle Background Message Tap
-  static void _handleBackgroundMessageTap(RemoteMessage message) {
-    print('📬 Background Notification Tapped: ${message.notification?.title}');
-  }
-
-  // ✅ Show Local Notification
   static Future<void> _showLocalNotification({
     required String title,
     required String body,
+    Map<String, dynamic> data = const {},
   }) async {
     try {
-      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        'bump_bond_channel',
-        'Bump Bond Notifications',
+      // Determine channel
+      String channelId = 'bump_bond_channel';
+      String channelName = 'Bump Bond Notifications';
+
+      if (data['feature'] == 'medication_reminder') {
+        channelId = 'medication_reminders';
+        channelName = 'Medication Reminders';
+      } else if (data['feature'] == 'baby_chat' || data['screen'] == 'baby_chat') {
+        channelId = 'baby_chat_channel';
+        channelName = 'Baby Messages';
+      }
+
+      final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        channelId,
+        channelName,
         channelDescription: 'Pregnancy tracking notifications',
         importance: Importance.high,
         priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+        styleInformation: BigTextStyleInformation(body),
       );
 
       const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
@@ -274,64 +337,100 @@ class NotificationService {
         presentSound: true,
       );
 
-      const NotificationDetails notificationDetails = NotificationDetails(
+      final NotificationDetails notificationDetails = NotificationDetails(
         android: androidDetails,
         iOS: iosDetails,
       );
 
+      // Generate unique ID
+      final notificationId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
       await _localNotifications.show(
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        notificationId,
         title,
         body,
         notificationDetails,
+        payload: json.encode(data),
       );
+
+      print('✅ Local notification shown: $title');
     } catch (e) {
       print('❌ Error showing local notification: $e');
     }
   }
 
-  // ✅ Save Notification to Local Storage
   static Future<void> _saveNotification({
     required String title,
     required String body,
+    Map<String, dynamic> data = const {},
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       List<String> notifications = prefs.getStringList('notifications') ?? [];
 
+      // Check for duplicates (same title + body within last 5 minutes)
+      final now = DateTime.now();
+      final fiveMinutesAgo = now.subtract(const Duration(minutes: 5));
+
+      for (String n in notifications) {
+        try {
+          final existing = json.decode(n) as Map<String, dynamic>;
+          final existingTime = DateTime.parse(existing['time'] ?? now.toString());
+          if (existing['title'] == title &&
+              existing['body'] == body &&
+              existingTime.isAfter(fiveMinutesAgo)) {
+            print('⚠️ Duplicate notification ignored: $title');
+            return;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+
       final notification = {
+        'id': DateTime.now().millisecondsSinceEpoch.toString(),
         'title': title,
         'body': body,
-        'time': DateTime.now().toIso8601String(),
+        'time': now.toIso8601String(),
+        'screen': data['screen'] ?? 'home',
+        'feature': data['feature'] ?? 'general',
+        'data': data,
+        'isRead': false,
       };
 
       notifications.insert(0, json.encode(notification));
 
-      if (notifications.length > 50) {
-        notifications = notifications.sublist(0, 50);
+      // Keep only last 100 notifications
+      if (notifications.length > 100) {
+        notifications = notifications.sublist(0, 100);
       }
 
       await prefs.setStringList('notifications', notifications);
+      print('✅ Notification saved: $title');
     } catch (e) {
       print('❌ Error saving notification: $e');
     }
   }
 
-  // ✅ Get All Notifications
-  static Future<List<Map<String, String>>> getNotifications() async {
+  static Future<List<Map<String, dynamic>>> getNotifications() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       List<String> notifications = prefs.getStringList('notifications') ?? [];
 
-      List<Map<String, String>> result = [];
+      List<Map<String, dynamic>> result = [];
 
       for (String n in notifications) {
         try {
-          final Map<String, dynamic> data = json.decode(n);
+          final data = json.decode(n) as Map<String, dynamic>;
           result.add({
+            'id': data['id']?.toString() ?? '',
             'title': data['title']?.toString() ?? 'Notification',
             'body': data['body']?.toString() ?? '',
             'time': data['time']?.toString() ?? DateTime.now().toIso8601String(),
+            'screen': data['screen']?.toString() ?? 'home',
+            'feature': data['feature']?.toString() ?? 'general',
+            'data': data['data'] ?? {},
+            'isRead': data['isRead'] == true,
           });
         } catch (e) {
           continue;
@@ -345,34 +444,173 @@ class NotificationService {
     }
   }
 
-  // ✅ Clear All Notifications
+  static Future<void> markAsRead(String notificationId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      List<String> notifications = prefs.getStringList('notifications') ?? [];
+
+      for (int i = 0; i < notifications.length; i++) {
+        try {
+          final data = json.decode(notifications[i]) as Map<String, dynamic>;
+          if (data['id'] == notificationId) {
+            data['isRead'] = true;
+            notifications[i] = json.encode(data);
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+
+      await prefs.setStringList('notifications', notifications);
+      print('✅ Notification marked as read: $notificationId');
+    } catch (e) {
+      print('❌ Error marking notification as read: $e');
+    }
+  }
+
   static Future<void> clearAllNotifications() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('notifications');
+      print('✅ All notifications cleared');
     } catch (e) {
       print('❌ Error clearing notifications: $e');
     }
   }
 
-  // ✅ Send Test Notification
+  static Future<void> deleteNotification(String notificationId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      List<String> notifications = prefs.getStringList('notifications') ?? [];
+
+      notifications.removeWhere((n) {
+        try {
+          final data = json.decode(n) as Map<String, dynamic>;
+          return data['id'] == notificationId;
+        } catch (e) {
+          return false;
+        }
+      });
+
+      await prefs.setStringList('notifications', notifications);
+      print('✅ Notification deleted: $notificationId');
+    } catch (e) {
+      print('❌ Error deleting notification: $e');
+    }
+  }
+
+  // ✅ FIXED: Water reminder with proper data
+  static Future<void> sendWaterReminder() async {
+    try {
+      final data = {
+        'screen': 'baby_chat',
+        'feature': 'water_reminder',
+        'babyName': 'Baby',
+        'initialMessage': 'Hey mumma! 💧 Time to drink water! Stay hydrated for both of us! 💙',
+        'isWaterReminder': true,
+      };
+
+      await _showLocalNotification(
+        title: '💧 Water Reminder',
+        body: 'Time to hydrate! Drinking water helps both you and your baby stay healthy.',
+        data: data,
+      );
+
+      await _saveNotification(
+        title: '💧 Water Reminder',
+        body: 'Time to hydrate! Drinking water helps both you and your baby stay healthy.',
+        data: data,
+      );
+
+      print('✅ Water reminder notification sent');
+    } catch (e) {
+      print('❌ Error sending water reminder: $e');
+    }
+  }
+
+  // Medication reminder
+  static Future<void> sendMedicationReminder(String medicationName, String time) async {
+    try {
+      final data = {
+        'screen': 'medications',
+        'feature': 'medication_reminder',
+        'medication': medicationName,
+        'time': time,
+      };
+
+      await _showLocalNotification(
+        title: '💊 Medication Reminder',
+        body: 'Time to take $medicationName',
+        data: data,
+      );
+
+      await _saveNotification(
+        title: '💊 Medication Reminder',
+        body: 'Time to take $medicationName',
+        data: data,
+      );
+
+      print('✅ Medication reminder sent: $medicationName');
+    } catch (e) {
+      print('❌ Error sending medication reminder: $e');
+    }
+  }
+
+  // Baby chat message
+  static Future<void> sendBabyChatMessage(String message, String babyName) async {
+    try {
+      final data = {
+        'screen': 'baby_chat',
+        'feature': 'baby_chat',
+        'babyName': babyName,
+        'message': message,
+      };
+
+      await _showLocalNotification(
+        title: '👶 $babyName',
+        body: message,
+        data: data,
+      );
+
+      await _saveNotification(
+        title: '👶 $babyName',
+        body: message,
+        data: data,
+      );
+
+      print('✅ Baby chat notification sent');
+    } catch (e) {
+      print('❌ Error sending baby chat notification: $e');
+    }
+  }
+
   static Future<void> sendTestNotification() async {
     try {
+      final data = {
+        'screen': 'home',
+        'feature': 'test',
+        'test': true,
+      };
+
       await _showLocalNotification(
         title: 'Test Notification 🎉',
         body: 'Your notifications are working perfectly!',
+        data: data,
       );
 
       await _saveNotification(
         title: 'Test Notification 🎉',
         body: 'Your notifications are working perfectly!',
+        data: data,
       );
+
+      print('✅ Test notification sent');
     } catch (e) {
       print('❌ Error sending test notification: $e');
     }
   }
 
-  // ✅ Get FCM Token
   static Future<String?> getFCMToken() async {
     try {
       return await _firebaseMessaging.getToken();
@@ -382,344 +620,3 @@ class NotificationService {
     }
   }
 }
-
-
-// import 'dart:convert';
-// import 'package:firebase_messaging/firebase_messaging.dart';
-// import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-// import 'package:shared_preferences/shared_preferences.dart';
-//
-// // Background Message Handler
-// @pragma('vm:entry-point')
-// Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-//
-//   print('🔔 Background Message: ${message.notification?.title}');
-//
-//   // Background notification show karega
-//   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-//   FlutterLocalNotificationsPlugin();
-//
-//   // Initialize local notifications for background
-//   const AndroidInitializationSettings androidSettings =
-//   AndroidInitializationSettings('@mipmap/ic_launcher');
-//   const DarwinInitializationSettings iosSettings =
-//   DarwinInitializationSettings();
-//   const InitializationSettings initSettings = InitializationSettings(
-//     android: androidSettings,
-//     iOS: iosSettings,
-//   );
-//
-//   await flutterLocalNotificationsPlugin.initialize(initSettings);
-//
-//   const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-//     'bump_bond_channel',
-//     'Bump Bond Notifications',
-//     channelDescription: 'Pregnancy tracking notifications',
-//     importance: Importance.high,
-//     priority: Priority.high,
-//   );
-//
-//   const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
-//     presentAlert: true,
-//     presentBadge: true,
-//     presentSound: true,
-//   );
-//
-//   const NotificationDetails notificationDetails = NotificationDetails(
-//     android: androidDetails,
-//     iOS: iosDetails,
-//   );
-//
-//   await flutterLocalNotificationsPlugin.show(
-//     DateTime.now().millisecondsSinceEpoch ~/ 1000,
-//     message.notification?.title ?? 'Bump Bond',
-//     message.notification?.body ?? 'New notification',
-//     notificationDetails,
-//   );
-//
-//   // Background mein bhi notification save karo
-//   await _saveNotificationInBackground(
-//     title: message.notification?.title ?? 'New Notification',
-//     body: message.notification?.body ?? '',
-//   );
-// }
-//
-// // Background ke liye alag save function
-// Future<void> _saveNotificationInBackground({
-//   required String title,
-//   required String body,
-// }) async {
-//   final prefs = await SharedPreferences.getInstance();
-//   List<String> notifications = prefs.getStringList('notifications') ?? [];
-//
-//   final notification = {
-//     'title': title,
-//     'body': body,
-//     'time': DateTime.now().toIso8601String(),
-//   };
-//
-//   notifications.insert(0, json.encode(notification));
-//
-//   if (notifications.length > 50) {
-//     notifications = notifications.sublist(0, 50);
-//   }
-//
-//   await prefs.setStringList('notifications', notifications);
-// }
-//
-// class NotificationService {
-//   static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
-//   static final FlutterLocalNotificationsPlugin _localNotifications =
-//   FlutterLocalNotificationsPlugin();
-//
-//   // ✅ Subscribe to topics for automated notifications
-//   static Future<void> subscribeToTopics() async {
-//     try {
-//       await _firebaseMessaging.subscribeToTopic('all_users');
-//       print('✅ Subscribed to automated notifications topic');
-//     } catch (e) {
-//       print('❌ Error subscribing to topics: $e');
-//     }
-//   }
-//
-//   // ✅ Initialize Notifications
-//   static Future<void> initialize() async {
-//     try {
-//       // Request Permission
-//       NotificationSettings settings = await _firebaseMessaging.requestPermission(
-//         alert: true,
-//         badge: true,
-//         sound: true,
-//       );
-//
-//       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-//         print('✅ User granted notification permission');
-//       } else {
-//         print('❌ User declined notification permission');
-//       }
-//
-//       // Get FCM Token
-//       String? token = await _firebaseMessaging.getToken();
-//       print('📱 FCM Token: $token');
-//
-//       // Save token to SharedPreferences
-//       final prefs = await SharedPreferences.getInstance();
-//       await prefs.setString('fcm_token', token ?? '');
-//
-//       // Initialize Local Notifications
-//       const AndroidInitializationSettings androidSettings =
-//       AndroidInitializationSettings('@mipmap/ic_launcher');
-//
-//       const DarwinInitializationSettings iosSettings =
-//       DarwinInitializationSettings(
-//         requestAlertPermission: true,
-//         requestBadgePermission: true,
-//         requestSoundPermission: true,
-//       );
-//
-//       const InitializationSettings initSettings = InitializationSettings(
-//         android: androidSettings,
-//         iOS: iosSettings,
-//       );
-//
-//       await _localNotifications.initialize(
-//         initSettings,
-//         onDidReceiveNotificationResponse: (details) {
-//           // Handle notification tap
-//           print('📬 Notification tapped: ${details.payload}');
-//         },
-//       );
-//
-//       // Create notification channel
-//       await _createNotificationChannel();
-//
-//       // Listen to foreground messages
-//       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-//
-//       // Handle background message tap
-//       FirebaseMessaging.onMessageOpenedApp.listen(_handleBackgroundMessageTap);
-//
-//       // Set background handler
-//       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-//
-//       // ✅ SUBSCRIBE TO TOPICS FOR AUTOMATED NOTIFICATIONS
-//       await subscribeToTopics();
-//
-//       // Get initial notification (app closed state)
-//       RemoteMessage? initialMessage = await _firebaseMessaging.getInitialMessage();
-//       if (initialMessage != null) {
-//         _handleBackgroundMessageTap(initialMessage);
-//       }
-//
-//       print('✅ Notification service initialized successfully');
-//
-//     } catch (e) {
-//       print('❌ Notification initialization error: $e');
-//     }
-//   }
-//
-//   // ✅ Create Notification Channel
-//   static Future<void> _createNotificationChannel() async {
-//     const AndroidNotificationChannel channel = AndroidNotificationChannel(
-//       'bump_bond_channel',
-//       'Bump Bond Notifications',
-//       description: 'Pregnancy tracking notifications',
-//       importance: Importance.high,
-//     );
-//
-//     await _localNotifications
-//         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-//         ?.createNotificationChannel(channel);
-//   }
-//
-//   // ✅ Handle Foreground Messages
-//   static Future<void> _handleForegroundMessage(RemoteMessage message) async {
-//     print('📩 Foreground Notification: ${message.notification?.title}');
-//
-//     // Save to local storage
-//     await _saveNotification(
-//       title: message.notification?.title ?? 'New Notification',
-//       body: message.notification?.body ?? '',
-//     );
-//
-//     // Show local notification
-//     await _showLocalNotification(
-//       title: message.notification?.title ?? 'Bump Bond',
-//       body: message.notification?.body ?? 'You have a new notification',
-//     );
-//   }
-//
-//   // ✅ Handle Background Message Tap
-//   static void _handleBackgroundMessageTap(RemoteMessage message) {
-//     print('📬 Background Notification Tapped: ${message.notification?.title}');
-//   }
-//
-//   // ✅ Show Local Notification
-//   static Future<void> _showLocalNotification({
-//     required String title,
-//     required String body,
-//   }) async {
-//     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-//       'bump_bond_channel',
-//       'Bump Bond Notifications',
-//       channelDescription: 'Pregnancy tracking notifications',
-//       importance: Importance.high,
-//       priority: Priority.high,
-//     );
-//
-//     const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
-//       presentAlert: true,
-//       presentBadge: true,
-//       presentSound: true,
-//     );
-//
-//     const NotificationDetails notificationDetails = NotificationDetails(
-//       android: androidDetails,
-//       iOS: iosDetails,
-//     );
-//
-//     await _localNotifications.show(
-//       DateTime.now().millisecondsSinceEpoch ~/ 1000,
-//       title,
-//       body,
-//       notificationDetails,
-//     );
-//   }
-//
-//   // ✅ Save Notification to Local Storage
-//   static Future<void> _saveNotification({
-//     required String title,
-//     required String body,
-//   }) async {
-//     try {
-//       final prefs = await SharedPreferences.getInstance();
-//       List<String> notifications = prefs.getStringList('notifications') ?? [];
-//
-//       final notification = {
-//         'title': title,
-//         'body': body,
-//         'time': DateTime.now().toIso8601String(),
-//       };
-//
-//       notifications.insert(0, json.encode(notification));
-//
-//       if (notifications.length > 50) {
-//         notifications = notifications.sublist(0, 50);
-//       }
-//
-//       await prefs.setStringList('notifications', notifications);
-//     } catch (e) {
-//       print('❌ Error saving notification: $e');
-//     }
-//   }
-//
-//   // ✅ Get All Notifications
-//   static Future<List<Map<String, String>>> getNotifications() async {
-//     try {
-//       final prefs = await SharedPreferences.getInstance();
-//       List<String> notifications = prefs.getStringList('notifications') ?? [];
-//
-//       List<Map<String, String>> result = [];
-//
-//       for (String n in notifications) {
-//         try {
-//           final Map<String, dynamic> data = json.decode(n);
-//           result.add({
-//             'title': data['title']?.toString() ?? 'Notification',
-//             'body': data['body']?.toString() ?? '',
-//             'time': data['time']?.toString() ?? DateTime.now().toIso8601String(),
-//           });
-//         } catch (e) {
-//           continue;
-//         }
-//       }
-//
-//       return result;
-//     } catch (e) {
-//       print('❌ Error getting notifications: $e');
-//       return [];
-//     }
-//   }
-//
-//   // ✅ Clear All Notifications
-//   static Future<void> clearAllNotifications() async {
-//     try {
-//       final prefs = await SharedPreferences.getInstance();
-//       await prefs.remove('notifications');
-//     } catch (e) {
-//       print('❌ Error clearing notifications: $e');
-//     }
-//   }
-//
-//   // ✅ Send Test Notification
-//   static Future<void> sendTestNotification() async {
-//     try {
-//       await _showLocalNotification(
-//         title: 'Test Notification 🎉',
-//         body: 'Your notifications are working perfectly!',
-//       );
-//
-//       await _saveNotification(
-//         title: 'Test Notification 🎉',
-//         body: 'Your notifications are working perfectly!',
-//       );
-//     } catch (e) {
-//       print('❌ Error sending test notification: $e');
-//     }
-//   }
-//
-//   // ✅ Get FCM Token
-//   static Future<String?> getFCMToken() async {
-//     return await _firebaseMessaging.getToken();
-//   }
-//
-//   // ✅ Unsubscribe from topics
-//   static Future<void> unsubscribeFromTopic(String topic) async {
-//     try {
-//       await _firebaseMessaging.unsubscribeFromTopic(topic);
-//       print('✅ Unsubscribed from topic: $topic');
-//     } catch (e) {
-//       print('❌ Error unsubscribing from topic: $e');
-//     }
-//   }
-// }

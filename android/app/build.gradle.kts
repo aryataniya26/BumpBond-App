@@ -1,5 +1,4 @@
 // android/app/build.gradle.kts
-
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -13,6 +12,8 @@ android {
     compileSdk = 36
     buildToolsVersion = "34.0.0"
     ndkVersion = "28.2.13676358"
+
+    
     defaultConfig {
         applicationId = "com.example.bump_bond_flutter_app"
         minSdk = flutter.minSdkVersion
@@ -20,6 +21,7 @@ android {
         versionCode = 1
         versionName = "1.0"
     }
+
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
@@ -55,6 +57,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.22")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation("com.google.android.exoplayer:exoplayer:2.19.0")
+    implementation("com.google.android.gms:play-services-ads:22.6.0")
 
 }
 

@@ -11,11 +11,15 @@ import 'package:bump_bond_flutter_app/auth/milestones.dart';
 import 'package:bump_bond_flutter_app/models/pregnancy_data.dart';
 import 'package:bump_bond_flutter_app/auth/moodsymptomtrackerscreen.dart';
 import 'package:bump_bond_flutter_app/auth/setting_screen.dart';
+import 'package:bump_bond_flutter_app/screens/meal_plan_screen.dart';
+import 'package:bump_bond_flutter_app/screens/subscription_plan_screen.dart';
 import 'package:bump_bond_flutter_app/screens/webinar_screen.dart';
 import 'package:bump_bond_flutter_app/screens/week_development_screen.dart';
 import 'package:bump_bond_flutter_app/screens/weekly_quiz_screen.dart';
+import 'package:bump_bond_flutter_app/services/subscription_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:bump_bond_flutter_app/services/ads_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -25,6 +29,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+  Widget? _bannerAd;
+
   String userName = "Mom";
   int currentWeek = 0;
   int currentDay = 0;
@@ -41,11 +47,29 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   PregnancyData? pregnancyData;
   bool _isExpanded = false;
   bool _isLoading = true;
+  String _currentPlan = 'free';
+  int _featureClickCounter = 0;
 
   @override
   void initState() {
     super.initState();
+    _loadBannerAd();
     _loadPregnancyData();
+    _loadCurrentPlan();
+
+    // Initialize ads when home screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AdsService.initialize();
+    });
+  }
+
+  Future<void> _loadBannerAd() async {
+    final ad = await AdsService.getBannerAd();
+    if (mounted) {
+      setState(() {
+        _bannerAd = ad;
+      });
+    }
   }
 
   void _loadPregnancyData() async {
@@ -77,6 +101,190 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
 
+  void _loadCurrentPlan() async {
+    final plan = await SubscriptionService.getCurrentPlan();
+    setState(() {
+      _currentPlan = plan;
+    });
+  }
+
+  bool _hasFeatureAccess(String requiredPlan) {
+    return SubscriptionService.hasAccess(_currentPlan, requiredPlan);
+  }
+
+  void _showUpgradeDialog(String featureName, String requiredPlan) {
+    String planName = requiredPlan == 'basic'
+        ? 'Basic (Ad-Free)'
+        : requiredPlan == 'premium'
+        ? 'Premium'
+        : 'Pro';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            const Text('👑', style: TextStyle(fontSize: 24)),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Upgrade Required',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Unlock "$featureName" with $planName Plan',
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F0FB),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (requiredPlan == 'basic') ...[
+                    _buildBenefitRow('No advertisements'),
+                    _buildBenefitRow('Ad-free experience'),
+                  ],
+                  if (requiredPlan == 'premium') ...[
+                    _buildBenefitRow('Unlimited AI baby chat'),
+                    _buildBenefitRow('Weekly recorded videos'),
+                    _buildBenefitRow('Voice/Photos in journal'),
+                    _buildBenefitRow('Custom meal plans'),
+                    _buildBenefitRow('Buddy Connect'),
+                    _buildBenefitRow('Book Consultation'),
+                  ],
+                  if (requiredPlan == 'pro') ...[
+                    _buildBenefitRow('Lifetime access'),
+                    _buildBenefitRow('Monthly webinars'),
+                    _buildBenefitRow('Partner sharing'),
+                    _buildBenefitRow('1-year support'),
+                    _buildBenefitRow('Buddy Connect'),
+                    _buildBenefitRow('Book Consultation'),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SubscriptionPlansScreen(),
+                ),
+              ).then((_) => _loadCurrentPlan());
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD4B5E8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'View Plans',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBenefitRow(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.check_circle,
+            size: 16,
+            color: Color(0xFFD4B5E8),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  // Updated method to handle feature access with interstitial ads
+  Future<void> _handleFeatureAccessWithAd(
+      String requiredPlan,
+      VoidCallback onAccess,
+      String featureName,
+      String screenName,
+      ) async {
+    if (_hasFeatureAccess(requiredPlan)) {
+      // Increment counter for ad frequency
+      _featureClickCounter++;
+
+      // Show interstitial ad every 3rd feature click for free users
+      if (_currentPlan == 'free' && _featureClickCounter % 3 == 0) {
+        await AdsService.showInterstitialAd(screenName: screenName);
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      onAccess();
+    } else {
+      _showUpgradeDialog(featureName, requiredPlan);
+    }
+  }
+
+  // Navigate to screen with interstitial ad
+  Future<void> _navigateWithAd({
+    required Widget screen,
+    required String screenName,
+    bool showAd = true,
+  }) async {
+    // Show ad for free users
+    if (_currentPlan == 'free' && showAd) {
+      await AdsService.showInterstitialAd(screenName: screenName);
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => screen),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -88,7 +296,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
 
     return Scaffold(
-
       backgroundColor: const Color(0xFFE6E6FA),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -97,6 +304,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildGreeting(),
+              const SizedBox(height: 16),
+              _buildCurrentPlanBanner(),
               const SizedBox(height: 24),
               _buildWeekCard(),
               const SizedBox(height: 28),
@@ -110,6 +319,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               const SizedBox(height: 20),
               _buildAllFeaturesMenu(context),
               const SizedBox(height: 20),
+
+              // Banner Ad Section
+              if (_currentPlan == 'free') _buildAdSection(),
             ],
           ),
         ),
@@ -117,8 +329,180 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildAdSection() {
+    return FutureBuilder<Widget>(
+      future: AdsService.getBannerAd(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            height: 60,
+            color: Colors.grey[200],
+            child: const Center(
+              child: Text(
+                'Loading advertisement...',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ),
+          );
+        }
 
+        if (snapshot.hasError) {
+          return Container(
+            height: 60,
+            color: Colors.red[100],
+            child: Center(
+              child: Text(
+                'Ad temporarily unavailable',
+                style: TextStyle(color: Colors.red[800], fontSize: 12),
+              ),
+            ),
+          );
+        }
 
+        return snapshot.data ?? const SizedBox(height: 0);
+      },
+    );
+  }
+
+  Widget _buildCurrentPlanBanner() {
+    Map<String, dynamic> planInfo = {
+      'free': {
+        'name': 'Free',
+        'color': Colors.orange,
+        'icon': Icons.free_breakfast,
+        'tag': 'WITH ADS',
+      },
+      'basic': {
+        'name': 'Basic',
+        'color': Colors.blue,
+        'icon': Icons.ads_click,
+        'tag': 'AD-FREE',
+      },
+      'premium': {
+        'name': 'Premium',
+        'color': const Color(0xFFD4B5E8),
+        'icon': Icons.favorite,
+        'tag': 'PREMIUM',
+      },
+      'pro': {
+        'name': 'Pro',
+        'color': const Color(0xFFFFB800),
+        'icon': Icons.emoji_events,
+        'tag': 'LIFETIME',
+      },
+    };
+
+    final currentPlanInfo = planInfo[_currentPlan] ?? planInfo['free'];
+
+    return GestureDetector(
+      onTap: () {
+        _navigateWithAd(
+          screen: const SubscriptionPlansScreen(),
+          screenName: 'Subscription Plans',
+          showAd: _currentPlan == 'free', // Only show ad for free users
+        ).then((_) => _loadCurrentPlan());
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              currentPlanInfo['color'].withOpacity(0.15),
+              currentPlanInfo['color'].withOpacity(0.05),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: currentPlanInfo['color'].withOpacity(0.3),
+            width: 2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: currentPlanInfo['color'].withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                currentPlanInfo['icon'],
+                color: currentPlanInfo['color'],
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Current Plan: ${currentPlanInfo['name']}',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: currentPlanInfo['color'],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: currentPlanInfo['color'],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          currentPlanInfo['tag'],
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _currentPlan == 'pro'
+                        ? 'Lifetime Access • All Features Unlocked'
+                        : 'Tap to upgrade and unlock more features',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_currentPlan != 'pro')
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Text(
+                  '👑',
+                  style: TextStyle(fontSize: 20),
+                ),
+              ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.arrow_forward_ios,
+              color: currentPlanInfo['color'],
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildGreeting() {
     String greeting = "Good afternoon";
@@ -132,7 +516,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // 👋 Greeting Text Section
             Row(
               children: [
                 Text(
@@ -147,12 +530,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 const Text('👋', style: TextStyle(fontSize: 24)),
               ],
             ),
-
-            // 🔔 Notification Icon Section
             GestureDetector(
               onTap: () {
-                print("Notification icon tapped!");
-                Navigator.push(context, MaterialPageRoute(builder: (_) => NotificationScreen()));
+                _navigateWithAd(
+                  screen: NotificationScreen(),
+                  screenName: 'Notifications',
+                );
               },
               child: Container(
                 padding: const EdgeInsets.all(7),
@@ -177,7 +560,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ],
         ),
-
         const SizedBox(height: 8),
         Text(
           'You\'re $currentWeek weeks pregnant • $daysToGo days to go',
@@ -189,7 +571,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ],
     );
   }
-
 
   Widget _buildWeekCard() {
     return Container(
@@ -404,11 +785,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _buildPremiumCard(
           icon: Icons.chat_bubble_rounded,
           title: 'Chat with $babyName',
-          subtitle: 'AI-powered baby conversations',
+          subtitle: _hasFeatureAccess('premium')
+              ? 'Unlimited AI-powered conversations'
+              : '5 chats/day • Upgrade for unlimited',
           color: const Color(0xFF8B5CF6),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => ChatScreen(babyName: babyName)),
+          isLocked: !_hasFeatureAccess('premium'),
+          onTap: () => _handleFeatureAccessWithAd(
+            'free',
+                () => _navigateWithAd(
+              screen: ChatScreen(babyName: babyName),
+              screenName: 'AI Baby Chat',
+            ),
+            'Unlimited AI Baby Chat',
+            'AI Baby Chat Screen',
           ),
         ),
         const SizedBox(height: 12),
@@ -420,12 +809,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 title: 'Weekly Quiz',
                 subtitle: 'Test your knowledge',
                 color: const Color(0xFF6366F1),
+                isLocked: false,
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => WeeklyQuizJourneyScreen(),
-                    ),
+                  _navigateWithAd(
+                    screen: WeeklyQuizJourneyScreen(),
+                    screenName: 'Weekly Quiz',
                   );
                 },
               ),
@@ -438,11 +826,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 subtitle: 'Find perfect name',
                 color: Colors.lightBlue,
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const BabyNameScreen(),
-                    ),
+                  _navigateWithAd(
+                    screen: const BabyNameScreen(),
+                    screenName: 'Baby Names',
                   );
                 },
               ),
@@ -459,6 +845,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     required String subtitle,
     required Color color,
     required VoidCallback onTap,
+    bool isLocked = false,
   }) {
     return Material(
       color: Colors.transparent,
@@ -512,8 +899,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ],
                 ),
               ),
-              const Text('👑', style: TextStyle(fontSize: 20)),
-              const SizedBox(width: 8),
+              if (isLocked) ...[
+                const Icon(Icons.lock, color: Colors.grey, size: 20),
+                const SizedBox(width: 8),
+              ] else ...[
+                const Text('👑', style: TextStyle(fontSize: 20)),
+                const SizedBox(width: 8),
+              ],
               Icon(Icons.arrow_forward_ios, color: Colors.grey[400], size: 16),
             ],
           ),
@@ -528,6 +920,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     required String subtitle,
     required Color color,
     required VoidCallback onTap,
+    bool isLocked = false,
   }) {
     return Material(
       color: Colors.transparent,
@@ -547,7 +940,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: color, size: 28),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Icon(icon, color: color, size: 28),
+                  if (isLocked)
+                    const Icon(Icons.lock, color: Colors.grey, size: 18),
+                ],
+              ),
               const SizedBox(height: 12),
               Text(
                 title,
@@ -600,12 +1000,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 subtitle: 'Track daily mood',
                 color: const Color(0xFFF3E5F5),
                 iconColor: const Color(0xFF9C27B0),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const MoodSymptomTrackerScreen(),
-                  ),
-                ),
+                onTap: () {
+                  _navigateWithAd(
+                    screen: const MoodSymptomTrackerScreen(),
+                    screenName: 'Mood & Symptom Tracker',
+                  );
+                },
               ),
             ),
             const SizedBox(width: 12),
@@ -616,12 +1016,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 subtitle: 'Log medication',
                 color: const Color(0xFFE8F5E9),
                 iconColor: const Color(0xFF4CAF50),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const MedicationRemindersScreen(),
-                  ),
-                ),
+                onTap: () {
+                  _navigateWithAd(
+                    screen: const MedicationRemindersScreen(),
+                    screenName: 'Medication Reminders',
+                  );
+                },
               ),
             ),
           ],
@@ -704,12 +1104,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _buildPremiumCard(
           icon: Icons.videocam_rounded,
           title: 'Weekly Webinar',
-          subtitle: 'Expert-led sessions',
+          subtitle: _hasFeatureAccess('premium')
+              ? 'Expert-led sessions'
+              : 'Unlock with Premium',
           color: const Color(0xFFFCD34D),
+          isLocked: !_hasFeatureAccess('premium'),
           onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => WebinarScreen()),
+            _handleFeatureAccessWithAd(
+              'premium',
+                  () => _navigateWithAd(
+                screen: WebinarScreen(),
+                screenName: 'Weekly Webinar',
+              ),
+              'Weekly Webinar',
+              'Webinar Screen',
             );
           },
         ),
@@ -720,14 +1128,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               child: _buildSmallCard(
                 icon: Icons.calendar_today_rounded,
                 title: 'Week Development',
-                subtitle: 'What\'s happening',
+                subtitle: "What's happening",
                 color: const Color(0xFF2196F3),
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => PregnancyJourneyScreen(),
-                    ),
+                  _navigateWithAd(
+                    screen: PregnancyJourneyScreen(),
+                    screenName: 'Week Development',
                   );
                 },
               ),
@@ -740,11 +1146,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 subtitle: 'Expert guidance',
                 color: const Color(0xFF10B981),
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ResourceLibraryScreen(),
-                    ),
+                  _navigateWithAd(
+                    screen: ResourceLibraryScreen(),
+                    screenName: 'Resources',
                   );
                 },
               ),
@@ -755,15 +1159,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         Row(
           children: [
             Expanded(
-              child: _buildSmallCard(
+              child: _buildLockedSmallCard(
                 icon: Icons.people_rounded,
                 title: 'Buddy Connect',
-                subtitle: 'Expert support',
+                subtitle: _hasFeatureAccess('premium')
+                    ? 'Expert support'
+                    : 'Unlock with Premium',
                 color: const Color(0xFF6A0DAD),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => BuddyConnectHome()),
-                ),
+                // isLocked: !_hasFeatureAccess('premium'),
+                onTap: () {
+                  _handleFeatureAccessWithAd(
+                    'premium',
+                        () => _navigateWithAd(
+                      screen: BuddyConnectHome(),
+                      screenName: 'Buddy Connect',
+                    ),
+                    'Buddy Connect',
+                    'Buddy Connect Screen',
+                  );
+                },
               ),
             ),
             const SizedBox(width: 12),
@@ -773,10 +1187,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 title: 'Milestones',
                 subtitle: 'Track progress',
                 color: const Color(0xFF4CAF50),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const MilestoneScreen()),
-                ),
+                onTap: () {
+                  _navigateWithAd(
+                    screen: const MilestoneScreen(),
+                    screenName: 'Milestones',
+                  );
+                },
               ),
             ),
           ],
@@ -826,6 +1242,109 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 style: TextStyle(
                   fontSize: 12,
                   color: color.withOpacity(0.8),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  Widget _buildMealPlanSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: const [
+            Icon(Icons.restaurant_menu, size: 20),
+            SizedBox(width: 8),
+            Text(
+              'Nutrition & Wellness',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1F2937),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildPremiumCard(
+          icon: Icons.restaurant_menu_rounded,
+          title: 'Custom Meal Plan',
+          subtitle: _hasFeatureAccess('premium')
+              ? 'Week-specific nutrition guide'
+              : 'Unlock with Premium',
+          color: const Color(0xFFFF6B6B),
+          isLocked: !_hasFeatureAccess('premium'),
+          onTap: () {
+            _handleFeatureAccessWithAd(
+              'premium',
+                  () => _navigateWithAd(
+                screen: const MealPlanScreen(),
+                screenName: 'Custom Meal Plan',
+              ),
+              'Custom Meal Plan',
+              'Meal Plan Screen',
+            );
+          },
+        ),
+      ],
+    );
+  }
+  Widget _buildLockedSmallCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+    bool isLocked = false,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isLocked ? Colors.grey.withOpacity(0.3) : color.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Icon(
+                    icon,
+                    color: isLocked ? Colors.grey : color,
+                    size: 28,
+                  ),
+                  if (isLocked)
+                    const Icon(Icons.lock, color: Colors.grey, size: 18),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: isLocked ? Colors.grey : color,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isLocked ? Colors.grey : color.withOpacity(0.8),
                 ),
               ),
             ],
@@ -889,17 +1408,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           Row(
             children: [
               Expanded(
-                child: _buildSmallCard(
+                child: _buildLockedSmallCard(
                   icon: Icons.calendar_month,
                   title: 'Book Consultation',
-                  subtitle: 'Doctor appointment',
+                  subtitle: _hasFeatureAccess('premium')
+                      ? 'Doctor appointment'
+                      : 'Unlock with Premium',
                   color: Colors.orange,
+                  // isLocked: !_hasFeatureAccess('premium'),
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => BookConsultationScreen(),
+                    _handleFeatureAccessWithAd(
+                      'premium',
+                          () => _navigateWithAd(
+                        screen: BookConsultationScreen(),
+                        screenName: 'Book Consultation',
                       ),
+                      'Book Consultation',
+                      'Book Consultation Screen',
                     );
                   },
                 ),
@@ -909,14 +1434,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: _buildSmallCard(
                   icon: Icons.notes,
                   title: 'Love Journal',
-                  subtitle: 'Private & safe',
+                  subtitle: _hasFeatureAccess('premium')
+                      ? 'Voice/Photos/Videos'
+                      : 'Text only',
                   color: Colors.pink,
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => JournalScreen(),
-                      ),
+                    _navigateWithAd(
+                      screen: JournalScreen(),
+                      screenName: 'Love Journal',
                     );
                   },
                 ),
@@ -924,22 +1449,44 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ],
           ),
           const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.only(right: 100),
-            child: _buildSmallCard(
-              icon: Icons.history,
-              title: 'Consultation History',
-              subtitle: 'Past appointments',
-              color: Colors.brown,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ConsultationHistoryScreen(),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLockedSmallCard(
+                  icon: Icons.restaurant_menu_rounded,
+                  title: 'Custom Meal Plan',
+                  subtitle: _hasFeatureAccess('premium')
+                      ? 'Personalized nutrition for your week'
+                      : 'Premium Week-specific meal planning',
+                  color: Colors.indigo,
+                  // isLocked: !_hasFeatureAccess('premium'),
+                  onTap: () => _handleFeatureAccessWithAd(
+                    'premium',
+                        () => _navigateWithAd(
+                      screen: const MealPlanScreen(),
+                      screenName: 'Custom Meal Plan',
+                    ),
+                    'Custom Meal Plan',
+                    'Meal Plan Screen',
                   ),
-                );
-              },
-            ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSmallCard(
+                  icon: Icons.history,
+                  title: 'Consultation History',
+                  subtitle: 'Past appointments',
+                  color: Colors.brown,
+                  onTap: () {
+                    _navigateWithAd(
+                      screen: ConsultationHistoryScreen(),
+                      screenName: 'Consultation History',
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ],
       ],
@@ -951,9 +1498,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => SettingsScreen()),
+          _navigateWithAd(
+            screen: SettingsScreen(),
+            screenName: 'All Features Menu',
           );
         },
         borderRadius: BorderRadius.circular(20),
@@ -1003,5 +1550,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    AdsService.dispose();
+    super.dispose();
   }
 }

@@ -43,41 +43,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
   }
-
-  // Future<void> _checkAuthFlow() async {
-  //   await Future.delayed(const Duration(seconds: 2));
-  //
-  //   final prefs = await SharedPreferences.getInstance();
-  //   final user = FirebaseAuth.instance.currentUser;
-  //
-  //   if (!mounted) return;
-  //
-  //   // ✅ Case 1: User is logged in
-  //   if (user != null) {
-  //     // Check if due date is set
-  //     final pregnancyData = await PregnancyData.loadFromPrefs();
-  //
-  //     if (pregnancyData.dueDate != null && pregnancyData.lastPeriodDate != null) {
-  //       // ✅ User has completed setup → Go to Home
-  //       Navigator.pushReplacement(
-  //         context,
-  //         MaterialPageRoute(builder: (_) => const MainScreen()),
-  //       );
-  //     } else {
-  //       // ✅ User logged in but hasn't set due date → Go to Setup
-  //       Navigator.pushReplacement(
-  //         context,
-  //         MaterialPageRoute(builder: (_) => const DueDateSetupScreen()),
-  //       );
-  //     }
-  //   } else {
-  //     // ✅ Case 2: User is NOT logged in → Go to Onboarding
-  //     Navigator.pushReplacement(
-  //       context,
-  //       MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-  //     );
-  //   }
-  // }
   Future<void> _checkAuthFlow() async {
     await Future.delayed(const Duration(seconds: 2));
 
@@ -119,7 +84,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               (route) => false,
         );
       } else {
-        // ❌ LOGGED IN but no pregnancy data
+        // LOGGED IN but no pregnancy data
         print('📅 Redirecting to DueDateSetupScreen');
         Navigator.pushAndRemoveUntil(
           context,

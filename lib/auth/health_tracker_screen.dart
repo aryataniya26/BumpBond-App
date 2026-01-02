@@ -4,6 +4,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 
 class HealthTrackerScreen extends StatefulWidget {
   const HealthTrackerScreen({Key? key}) : super(key: key);
@@ -44,16 +46,92 @@ class _HealthTrackerScreenState extends State<HealthTrackerScreen> {
   FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
   FlutterLocalNotificationsPlugin();
 
+  bool _isMedicationsLoading = true;
+  List<QueryDocumentSnapshot> _medications = [];
+
   @override
   void initState() {
     super.initState();
-    tz.initializeTimeZones();
-    tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
+    _initializeNotifications();
+    _requestNotificationPermission();
+    _loadMedications();
+  }
 
-    var androidInit = const AndroidInitializationSettings('@mipmap/ic_launcher');
-    var iosInit = const DarwinInitializationSettings();
-    var initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
-    flutterLocalNotificationsPlugin.initialize(initSettings);
+  Future<void> _loadMedications() async {
+    try {
+      final snapshot = await _medicationCollection
+          .orderBy('createdAt', descending: false)
+          .get();
+
+      setState(() {
+        _medications = snapshot.docs;
+        _isMedicationsLoading = false;
+      });
+    } catch (e) {
+      print('Error loading medications: $e');
+      setState(() {
+        _isMedicationsLoading = false;
+      });
+    }
+  }
+
+  Future<void> _initializeNotifications() async {
+    tz.initializeTimeZones();
+
+    // India timezone
+    try {
+      tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
+    } catch (e) {
+      print('Timezone error: $e');
+    }
+
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosInit = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    const initSettings = InitializationSettings(
+      android: androidInit,
+      iOS: iosInit,
+    );
+
+    await flutterLocalNotificationsPlugin.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: _onNotificationTapped,
+    );
+
+    //  notification channel
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'medication_reminders',
+      'Medication Reminders',
+      description: 'Daily medication reminder notifications',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    final androidPlugin = flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+
+    if (androidPlugin != null) {
+      await androidPlugin.createNotificationChannel(channel);
+    }
+  }
+
+  Future<void> _requestNotificationPermission() async {
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
+    }
+
+    if (await Permission.scheduleExactAlarm.isDenied) {
+      await Permission.scheduleExactAlarm.request();
+    }
+  }
+
+  void _onNotificationTapped(NotificationResponse response) {
+    print('Notification tapped: ${response.payload}');
   }
 
   void _saveHealthEntry() async {
@@ -71,61 +149,98 @@ class _HealthTrackerScreenState extends State<HealthTrackerScreen> {
       return;
     }
 
-    await _healthCollection.add({
-      'mood': _selectedMood,
-      'symptoms': _selectedSymptoms.toList(),
-      'notes': _notesController.text.trim(),
-      'timestamp': FieldValue.serverTimestamp(),
-    });
+    try {
+      await _healthCollection.add({
+        'mood': _selectedMood,
+        'symptoms': _selectedSymptoms.toList(),
+        'notes': _notesController.text.trim(),
+        'timestamp': FieldValue.serverTimestamp(),
+      });
 
-    setState(() {
-      _selectedMood = null;
-      _selectedSymptoms.clear();
-      _notesController.clear();
-    });
+      setState(() {
+        _selectedMood = null;
+        _selectedSymptoms.clear();
+        _notesController.clear();
+      });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white),
-            SizedBox(width: 12),
-            Text('Health entry saved successfully!'),
-          ],
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text('Health entry saved successfully!'),
+            ],
+          ),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
-        backgroundColor: const Color(0xFF10B981),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+      );
+    } catch (e) {
+      print('Error saving health entry: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Error saving entry'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _deleteHealthEntry(String id) async {
-    await _healthCollection.doc(id).delete();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Entry deleted'),
-        backgroundColor: const Color(0xFFEF4444),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    try {
+      await _healthCollection.doc(id).delete();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Entry deleted'),
+          backgroundColor: const Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    } catch (e) {
+      print('Error deleting health entry: $e');
+    }
   }
 
-  void _toggleMedication(String id, bool currentStatus) async {
-    await _medicationCollection.doc(id).update({'taken': !currentStatus});
+  void _toggleMedication(String id, String medName, bool currentStatus) async {
+    try {
+      await _medicationCollection.doc(id).update({'taken': !currentStatus});
+
+      // Reload medications
+      _loadMedications();
+
+      if (!currentStatus) {
+        _sendMedicationTakenNotification(medName);
+      }
+    } catch (e) {
+      print('Error toggling medication: $e');
+    }
   }
 
-  void _deleteMedication(String id) async {
-    await _medicationCollection.doc(id).delete();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Medication deleted'),
-        backgroundColor: const Color(0xFFEF4444),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+  void _deleteMedication(String id, int notificationId) async {
+    try {
+      // notification cancel
+      await flutterLocalNotificationsPlugin.cancel(notificationId);
+
+      // database delete
+      await _medicationCollection.doc(id).delete();
+
+      // Reload medications
+      _loadMedications();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Medication and reminders deleted'),
+          backgroundColor: const Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    } catch (e) {
+      print('Error deleting medication: $e');
+    }
   }
 
   void _addMedication() async {
@@ -134,49 +249,25 @@ class _HealthTrackerScreenState extends State<HealthTrackerScreen> {
     await showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Row(
-            children: [
-              Icon(Icons.medication, color: Color(0xFFA78BFA)),
-              SizedBox(width: 12),
-              Text('Add Medication'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _medNameController,
-                decoration: InputDecoration(
-                  labelText: 'Medication Name',
-                  prefixIcon: const Icon(Icons.local_pharmacy, color: Color(0xFFC239B3)),
-                  filled: true,
-                  fillColor: const Color(0xFFF9FAFB),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Row(
+                children: [
+                  Icon(Icons.medication, color: Color(0xFFA78BFA)),
+                  SizedBox(width: 12),
+                  Text('Add Medication Reminder'),
+                ],
               ),
-              const SizedBox(height: 16),
-              GestureDetector(
-                onTap: () async {
-                  final time = await showTimePicker(
-                    context: context,
-                    initialTime: TimeOfDay.now(),
-                  );
-                  if (time != null) {
-                    selectedTime = time;
-                    _medTimeController.text = time.format(context);
-                  }
-                },
-                child: AbsorbPointer(
-                  child: TextField(
-                    controller: _medTimeController,
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _medNameController,
                     decoration: InputDecoration(
-                      labelText: 'Time (tap to select)',
-                      prefixIcon: const Icon(Icons.access_time, color: Color(0xFFC239B3)),
+                      labelText: 'Medication Name',
+                      prefixIcon: const Icon(Icons.local_pharmacy, color: Color(0xFFC239B3)),
                       filled: true,
                       fillColor: const Color(0xFFF9FAFB),
                       border: OutlineInputBorder(
@@ -185,93 +276,235 @@ class _HealthTrackerScreenState extends State<HealthTrackerScreen> {
                       ),
                     ),
                   ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                _medNameController.clear();
-                _medTimeController.clear();
-                Navigator.pop(context);
-              },
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final name = _medNameController.text.trim();
-                if (name.isNotEmpty && selectedTime != null) {
-                  await _medicationCollection.add({
-                    'name': name,
-                    'time': _medTimeController.text,
-                    'taken': false,
-                  });
-
-                  await scheduleMedicationReminder(name, selectedTime!);
-
-                  _medNameController.clear();
-                  _medTimeController.clear();
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text('Medication reminder added!'),
-                      backgroundColor: const Color(0xFF10B981),
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  const SizedBox(height: 16),
+                  GestureDetector(
+                    onTap: () async {
+                      final time = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      if (time != null) {
+                        selectedTime = time;
+                        _medTimeController.text = time.format(context);
+                        setDialogState(() {});
+                      }
+                    },
+                    child: AbsorbPointer(
+                      child: TextField(
+                        controller: _medTimeController,
+                        decoration: InputDecoration(
+                          labelText: 'Reminder Time (tap to select)',
+                          prefixIcon: const Icon(Icons.access_time, color: Color(0xFFC239B3)),
+                          filled: true,
+                          fillColor: const Color(0xFFF9FAFB),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
                     ),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFC239B3),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'You\'ll receive daily reminders until you remove this medication',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.orange[900],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              child: const Text('Add'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _medNameController.clear();
+                    _medTimeController.clear();
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final name = _medNameController.text.trim();
+                    if (name.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter medication name')),
+                      );
+                      return;
+                    }
+                    if (selectedTime == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select reminder time')),
+                      );
+                      return;
+                    }
+
+                    final notificationId = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+
+                    try {
+                      await _medicationCollection.add({
+                        'name': name,
+                        'time': _medTimeController.text,
+                        'timeHour': selectedTime!.hour,
+                        'timeMinute': selectedTime!.minute,
+                        'taken': false,
+                        'notificationId': notificationId,
+                        'createdAt': FieldValue.serverTimestamp(),
+                      });
+
+                      await scheduleMedicationReminder(name, selectedTime!, notificationId);
+
+                      _medNameController.clear();
+                      _medTimeController.clear();
+
+                      // Reload medications
+                      _loadMedications();
+
+                      Navigator.pop(context);
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(
+                            children: [
+                              const Icon(Icons.check_circle, color: Colors.white),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text('Daily reminder set for ${selectedTime!.format(context)}'),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: const Color(0xFF10B981),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          duration: const Duration(seconds: 4),
+                        ),
+                      );
+                    } catch (e) {
+                      print('Error adding medication: $e');
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFC239B3),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Set Reminder', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
         );
       },
     );
   }
 
-  Future<void> scheduleMedicationReminder(String medName, TimeOfDay time) async {
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'med_channel',
-      'Medication Reminder',
-      channelDescription: 'Reminder for taking medications',
-      importance: Importance.max,
-      priority: Priority.high,
-      playSound: true,
-      enableVibration: true,
-    );
+  Future<void> scheduleMedicationReminder(
+      String medName, TimeOfDay time, int notificationId) async {
+    try {
+      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        'medication_reminders',
+        'Medication Reminders',
+        channelDescription: 'Daily medication reminder notifications',
+        importance: Importance.max,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+        icon: '@mipmap/ic_launcher',
+        color: Color(0xFFB794F4),
+        ledColor: Color(0xFFB794F4),
+        ledOnMs: 1000,
+        ledOffMs: 500,
+      );
 
-    const NotificationDetails notificationDetails =
-    NotificationDetails(android: androidDetails);
+      const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
 
-    final now = tz.TZDateTime.now(tz.local);
-    tz.TZDateTime scheduledTime = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day,
-      time.hour,
-      time.minute,
-    );
+      const NotificationDetails notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
 
-    if (scheduledTime.isBefore(now)) {
-      scheduledTime = scheduledTime.add(const Duration(days: 1));
+      final now = tz.TZDateTime.now(tz.local);
+      tz.TZDateTime scheduledTime = tz.TZDateTime(
+        tz.local,
+        now.year,
+        now.month,
+        now.day,
+        time.hour,
+        time.minute,
+      );
+
+      // time schedule
+      if (scheduledTime.isBefore(now)) {
+        scheduledTime = scheduledTime.add(const Duration(days: 1));
+      }
+
+      await flutterLocalNotificationsPlugin.zonedSchedule(
+        notificationId,
+        '💊 Medicine Reminder',
+        'Time to take $medName',
+        scheduledTime,
+        notificationDetails,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        matchDateTimeComponents: DateTimeComponents.time,
+        payload: medName,
+      );
+
+      print('✅ Reminder scheduled for $medName at ${time.format(context)} daily (ID: $notificationId)');
+    } catch (e) {
+      print('❌ Error scheduling reminder: $e');
     }
+  }
 
-    await flutterLocalNotificationsPlugin.zonedSchedule(
-      medName.hashCode,
-      'Medication Reminder',
-      'Time to take $medName 💊',
-      scheduledTime,
-      notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time,
-    );
+  Future<void> _sendMedicationTakenNotification(String medName) async {
+    try {
+      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        'medication_reminders',
+        'Medication Reminders',
+        channelDescription: 'Medication taken confirmations',
+        importance: Importance.low,
+        priority: Priority.low,
+        playSound: false,
+        icon: '@mipmap/ic_launcher',
+      );
+
+      const NotificationDetails notificationDetails = NotificationDetails(
+        android: androidDetails,
+      );
+
+      await flutterLocalNotificationsPlugin.show(
+        DateTime.now().millisecondsSinceEpoch.remainder(100000),
+        '✅ Medicine Taken',
+        'You\'ve marked $medName as taken',
+        notificationDetails,
+      );
+    } catch (e) {
+      print('Error sending taken notification: $e');
+    }
   }
 
   @override
@@ -537,17 +770,19 @@ class _HealthTrackerScreenState extends State<HealthTrackerScreen> {
                         .orderBy('timestamp', descending: true)
                         .snapshots(),
                     builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const Center(child: CircularProgressIndicator());
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator(color: Color(0xFFB794F4)));
                       }
-                      final docs = snapshot.data!.docs;
-                      if (docs.isEmpty) {
+
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                         return _buildEmptyState(
                           'No health entries yet',
                           'Start tracking your health today!',
                           Icons.favorite_border,
                         );
                       }
+
+                      final docs = snapshot.data!.docs;
                       return ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -648,44 +883,74 @@ class _HealthTrackerScreenState extends State<HealthTrackerScreen> {
                       Container(
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [Color(0xFFB794F4), Color(0xFFB794F4)],
+                            colors: [Color(0xFFB794F4), Color(0xFF9C27B0)],
                           ),
                           borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFB794F4).withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
                         child: IconButton(
-                          icon: const Icon(Icons.add, color: Colors.white),
+                          icon: const Icon(Icons.add, color: Colors.white, size: 28),
                           onPressed: _addMedication,
+                          tooltip: 'Add medication reminder',
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
 
-                  // Medication List
-                  StreamBuilder<QuerySnapshot>(
-                    stream: _medicationCollection.snapshots(),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      final meds = snapshot.data!.docs;
-                      if (meds.isEmpty) {
-                        return _buildEmptyState(
-                          'No medications added',
-                          'Add reminders for your medications',
-                          Icons.medication_outlined,
-                        );
-                      }
-                      return ListView.builder(
+                  //todo Medication List - FIXED: Using FutureBuilder instead of StreamBuilder for initial load
+                  _isMedicationsLoading
+                      ? const Center(child: CircularProgressIndicator(color: Color(0xFFB794F4)))
+                      : _medications.isEmpty
+                      ? _buildEmptyState(
+                    'No medication reminders',
+                    'Tap + to add daily medication reminders',
+                    Icons.medication_outlined,
+                  )
+                      : Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDCFCE7),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF10B981), width: 1),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.green[700], size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'You\'ll receive daily reminders at set times',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.green[900],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        itemCount: meds.length,
+                        itemCount: _medications.length,
                         itemBuilder: (context, index) {
-                          final med = meds[index];
+                          final med = _medications[index];
                           final data = med.data() as Map<String, dynamic>;
-                          final name = data['name'] ?? '';
-                          final time = data['time'] ?? '';
+                          final name = data['name'] ?? 'Unknown';
+                          final time = data['time'] ?? 'No time set';
                           final taken = data['taken'] ?? false;
+                          final notificationId = data['notificationId'] ?? 0;
 
                           return Container(
                             margin: const EdgeInsets.only(bottom: 12),
@@ -695,7 +960,7 @@ class _HealthTrackerScreenState extends State<HealthTrackerScreen> {
                               border: Border.all(
                                 color: taken
                                     ? const Color(0xFF10B981).withOpacity(0.3)
-                                    : Colors.transparent,
+                                    : const Color(0xFFB794F4).withOpacity(0.3),
                                 width: 2,
                               ),
                               boxShadow: [
@@ -709,53 +974,139 @@ class _HealthTrackerScreenState extends State<HealthTrackerScreen> {
                             child: ListTile(
                               contentPadding: const EdgeInsets.all(16),
                               leading: GestureDetector(
-                                onTap: () => _toggleMedication(med.id, taken),
+                                onTap: () => _toggleMedication(med.id, name, taken),
                                 child: Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
                                     color: taken
                                         ? const Color(0xFF10B981).withOpacity(0.1)
-                                        : const Color(0xFFF3F4F6),
+                                        : const Color(0xFFB794F4).withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Icon(
                                     taken ? Icons.check_circle : Icons.radio_button_unchecked,
-                                    color: taken ? const Color(0xFF10B981) : Colors.grey,
+                                    color: taken ? const Color(0xFF10B981) : const Color(0xFFB794F4),
                                     size: 32,
                                   ),
                                 ),
                               ),
-                              title: Text(
-                                name,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  decoration: taken ? TextDecoration.lineThrough : null,
-                                  color: taken ? Colors.grey : const Color(0xFF1F2937),
-                                ),
-                              ),
-                              subtitle: Row(
+                              title: Row(
                                 children: [
-                                  const Icon(Icons.access_time, size: 16, color: Color(0xFFB794F4)),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    time,
-                                    style: const TextStyle(
-                                      color: Color(0xFFB794F4),
-                                      fontWeight: FontWeight.w500,
+                                  Expanded(
+                                    child: Text(
+                                      name,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        decoration: taken ? TextDecoration.lineThrough : null,
+                                        color: taken ? Colors.grey : const Color(0xFF1F2937),
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFB794F4).withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.alarm, size: 14, color: Color(0xFFB794F4)),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Daily',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFFB794F4),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
                               ),
+                              subtitle: Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.access_time, size: 16, color: Color(0xFFB794F4)),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      time,
+                                      style: const TextStyle(
+                                        color: Color(0xFFB794F4),
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: taken
+                                            ? const Color(0xFF10B981).withOpacity(0.1)
+                                            : Colors.orange.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        taken ? 'Taken today' : 'Pending',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: taken ? const Color(0xFF10B981) : Colors.orange[800],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                               trailing: IconButton(
                                 icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
-                                onPressed: () => _deleteMedication(med.id),
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      title: const Row(
+                                        children: [
+                                          Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                                          SizedBox(width: 12),
+                                          Text('Delete Reminder?'),
+                                        ],
+                                      ),
+                                      content: Text(
+                                        'This will stop all daily reminders for $name',
+                                        style: const TextStyle(fontSize: 15),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(context),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFFEF4444),
+                                          ),
+                                          onPressed: () {
+                                            _deleteMedication(med.id, notificationId);
+                                            Navigator.pop(context);
+                                          },
+                                          child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           );
                         },
-                      );
-                    },
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -774,7 +1125,7 @@ class _HealthTrackerScreenState extends State<HealthTrackerScreen> {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFFB794F4), Color(0xFFB794F4)],
+              colors: [Color(0xFFB794F4), Color(0xFF9C27B0)],
             ),
             borderRadius: BorderRadius.circular(10),
           ),
@@ -839,4 +1190,13 @@ class _HealthTrackerScreenState extends State<HealthTrackerScreen> {
       ),
     );
   }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    _medNameController.dispose();
+    _medTimeController.dispose();
+    super.dispose();
+  }
 }
+

@@ -7,7 +7,9 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:convert';
-
+import '../services/subscription_service.dart';
+import '../screens/subscription_plan_screen.dart';
+import 'journal_entries_view_screen.dart';
 
 class JournalScreen extends StatefulWidget {
   const JournalScreen({Key? key}) : super(key: key);
@@ -26,6 +28,9 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
   bool _isPlaying = false;
   String? _currentPlayingId;
 
+  // Subscription related
+  String _currentUserPlan = 'free';
+
   // Lavender color palette
   static const Color primaryLavender = Color(0xFF7C3AED);
   static const Color lightLavender = Color(0xFFF3E8FF);
@@ -39,6 +44,7 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+    _loadUserPlan();
     _loadEntries();
   }
 
@@ -50,33 +56,137 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
     super.dispose();
   }
 
-  // Load entries from SharedPreferences
-  Future<void> _loadEntries() async {
-    final prefs = await SharedPreferences.getInstance();
-    final entriesJson = prefs.getString('journal_entries');
+  // ==================== SUBSCRIPTION LOGIC ====================
+  Future<void> _loadUserPlan() async {
+    final plan = await SubscriptionService.getCurrentPlan();
+    setState(() {
+      _currentUserPlan = plan;
+    });
+  }
 
-    if (entriesJson != null) {
-      try {
-        final List<dynamic> decoded = json.decode(entriesJson);
-        setState(() {
-          _entries = decoded.map((e) => JournalEntry.fromJson(e as Map<String, dynamic>)).toList();
-          _entries.sort((a, b) => b.date.compareTo(a.date));
-        });
-      } catch (e) {
-        print('Error loading entries: $e');
-      }
+  bool _hasAccess(String requiredPlan) {
+    final planHierarchy = ['free', 'basic', 'premium', 'pro'];
+    final userIndex = planHierarchy.indexOf(_currentUserPlan);
+    final requiredIndex = planHierarchy.indexOf(requiredPlan);
+    return userIndex >= requiredIndex;
+  }
+
+  Color _getPlanColor(String planKey) {
+    switch (planKey) {
+      case 'free': return Colors.orange;
+      case 'basic': return Colors.blue;
+      case 'premium': return const Color(0xFFD4B5E8);
+      case 'pro': return const Color(0xFFFFB800);
+      default: return Colors.grey;
     }
   }
 
-  // Save entries to SharedPreferences
-  Future<void> _saveEntries() async {
-    final prefs = await SharedPreferences.getInstance();
-    final entriesJson = json.encode(_entries.map((e) => e.toJson()).toList());
-    await prefs.setString('journal_entries', entriesJson);
+  Widget _buildLockedFeature({
+    required String featureName,
+    required String requiredPlan,
+    required String description,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.lock, color: Colors.grey[500], size: 48),
+          const SizedBox(height: 16),
+          Text(
+            '$featureName Locked',
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1F2937),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            description,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Maybe Later'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SubscriptionPlansScreen()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _getPlanColor(requiredPlan),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text(
+                    'Upgrade to\n$requiredPlan',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
-  // Pick image from gallery
+  void _showMediaLockedDialog(String mediaType) {
+    String featureName = '';
+    String description = '';
+
+    if (mediaType == 'photo') {
+      featureName = 'Photo Upload';
+      description = 'Free plan supports text-only entries\nUpgrade to Premium to add photos to your memories';
+    } else if (mediaType == 'audio') {
+      featureName = 'Voice Recording';
+      description = 'Free plan supports text-only entries\nUpgrade to Premium to add voice notes to your memories';
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: _buildLockedFeature(
+          featureName: featureName,
+          requiredPlan: 'premium',
+          description: description,
+        ),
+      ),
+    );
+  }
+
+  // ==================== MEDIA FUNCTIONS WITH SUBSCRIPTION CHECKS ====================
   Future<void> _pickImage(Function(String) onImagePicked) async {
+    if (!_hasAccess('premium')) {
+      _showMediaLockedDialog('photo');
+      return;
+    }
+
     try {
       final XFile? image = await _imagePicker.pickImage(
         source: ImageSource.gallery,
@@ -101,8 +211,12 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
     }
   }
 
-  // Take picture from camera
   Future<void> _takePicture(Function(String) onImagePicked) async {
+    if (!_hasAccess('premium')) {
+      _showMediaLockedDialog('photo');
+      return;
+    }
+
     try {
       final XFile? image = await _imagePicker.pickImage(
         source: ImageSource.camera,
@@ -127,8 +241,12 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
     }
   }
 
-  // Start audio recording
   Future<void> _startRecording() async {
+    if (!_hasAccess('premium')) {
+      _showMediaLockedDialog('audio');
+      return;
+    }
+
     try {
       if (await _audioRecorder.hasPermission()) {
         final directory = await getApplicationDocumentsDirectory();
@@ -141,7 +259,30 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
     }
   }
 
-  // Stop audio recording
+  // ==================== ENTRY MANAGEMENT ====================
+  Future<void> _loadEntries() async {
+    final prefs = await SharedPreferences.getInstance();
+    final entriesJson = prefs.getString('journal_entries');
+
+    if (entriesJson != null) {
+      try {
+        final List<dynamic> decoded = json.decode(entriesJson);
+        setState(() {
+          _entries = decoded.map((e) => JournalEntry.fromJson(e as Map<String, dynamic>)).toList();
+          _entries.sort((a, b) => b.date.compareTo(a.date));
+        });
+      } catch (e) {
+        print('Error loading entries: $e');
+      }
+    }
+  }
+
+  Future<void> _saveEntries() async {
+    final prefs = await SharedPreferences.getInstance();
+    final entriesJson = json.encode(_entries.map((e) => e.toJson()).toList());
+    await prefs.setString('journal_entries', entriesJson);
+  }
+
   Future<String?> _stopRecording() async {
     try {
       final path = await _audioRecorder.stop();
@@ -153,7 +294,6 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
     }
   }
 
-  // Play audio
   Future<void> _playAudio(String path, String entryId) async {
     try {
       if (_isPlaying && _currentPlayingId == entryId) {
@@ -208,23 +348,47 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 70,
-                    height: 70,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [primaryLavender, accentLavender],
-                      ),
-                      borderRadius: BorderRadius.circular(35),
-                      boxShadow: [
-                        BoxShadow(
-                          color: primaryLavender.withOpacity(0.3),
-                          blurRadius: 15,
-                          offset: const Offset(0, 5),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        width: 70,
+                        height: 70,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [primaryLavender, accentLavender],
+                          ),
+                          borderRadius: BorderRadius.circular(35),
+                          boxShadow: [
+                            BoxShadow(
+                              color: primaryLavender.withOpacity(0.3),
+                              blurRadius: 15,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 35),
+                        child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 35),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _currentUserPlan == 'premium' || _currentUserPlan == 'pro'
+                              ? _getPlanColor(_currentUserPlan).withOpacity(0.2)
+                              : Colors.grey[200],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          _currentUserPlan.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _currentUserPlan == 'premium' || _currentUserPlan == 'pro'
+                                ? _getPlanColor(_currentUserPlan)
+                                : Colors.grey[600],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 20),
                   const Text(
@@ -238,7 +402,9 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "Capture this special moment",
+                    _hasAccess('premium')
+                        ? "Capture this special moment with photos & voice"
+                        : "Free plan: Text entries only",
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey[600],
@@ -287,8 +453,6 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // Image Preview
                   if (imagePath != null)
                     Container(
                       margin: const EdgeInsets.only(bottom: 16),
@@ -319,8 +483,6 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                         ],
                       ),
                     ),
-
-                  // Audio Preview
                   if (audioPath != null)
                     Container(
                       margin: const EdgeInsets.only(bottom: 16),
@@ -342,8 +504,6 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                         ],
                       ),
                     ),
-
-                  // Media Buttons
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -357,25 +517,27 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                         _buildMediaButton(
                           Icons.photo_camera_rounded,
                           "Camera",
-                              () async {
+                          _hasAccess('premium') ? () async {
                             await _takePicture((path) {
                               setDialogState(() => imagePath = path);
                             });
-                          },
+                          } : () => _showMediaLockedDialog('photo'),
+                          isLocked: !_hasAccess('premium'),
                         ),
                         _buildMediaButton(
                           Icons.photo_library_rounded,
                           "Gallery",
-                              () async {
+                          _hasAccess('premium') ? () async {
                             await _pickImage((path) {
                               setDialogState(() => imagePath = path);
                             });
-                          },
+                          } : () => _showMediaLockedDialog('photo'),
+                          isLocked: !_hasAccess('premium'),
                         ),
                         _buildMediaButton(
                           _isRecording ? Icons.stop_circle_rounded : Icons.mic_rounded,
                           _isRecording ? "Stop" : "Audio",
-                              () async {
+                          _hasAccess('premium') ? () async {
                             if (_isRecording) {
                               final path = await _stopRecording();
                               if (path != null) {
@@ -385,14 +547,67 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                               await _startRecording();
                               setDialogState(() {});
                             }
-                          },
+                          } : () => _showMediaLockedDialog('audio'),
+                          isLocked: !_hasAccess('premium'),
                         ),
                       ],
                     ),
                   ),
+                  if (!_hasAccess('premium')) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.orange),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline_rounded, color: Colors.orange[700]),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Upgrade for Photos & Voice',
+                                  style: TextStyle(
+                                    color: Colors.orange[800],
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  'Free plan supports text-only entries',
+                                  style: TextStyle(
+                                    color: Colors.orange[700],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const SubscriptionPlansScreen()),
+                              );
+                            },
+                            child: Text(
+                              'Upgrade',
+                              style: TextStyle(
+                                color: Colors.orange[800],
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 24),
-
-                  // Action Buttons
                   Row(
                     children: [
                       Expanded(
@@ -472,7 +687,7 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildMediaButton(IconData icon, String label, VoidCallback onPressed) {
+  Widget _buildMediaButton(IconData icon, String label, VoidCallback onPressed, {bool isLocked = false}) {
     return InkWell(
       onTap: onPressed,
       borderRadius: BorderRadius.circular(16),
@@ -484,89 +699,49 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [primaryLavender, accentLavender],
-                ),
+                gradient: isLocked
+                    ? const LinearGradient(colors: [Colors.grey, Colors.grey])
+                    : const LinearGradient(colors: [primaryLavender, accentLavender]),
                 borderRadius: BorderRadius.circular(28),
                 boxShadow: [
                   BoxShadow(
-                    color: primaryLavender.withOpacity(0.3),
+                    color: (isLocked ? Colors.grey : primaryLavender).withOpacity(0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 3),
                   ),
                 ],
               ),
-              child: Icon(icon, color: Colors.white, size: 26),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Icon(icon, color: Colors.white, size: 26),
+                  if (isLocked)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.lock, color: Colors.grey, size: 12),
+                      ),
+                    ),
+                ],
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF1F2937),
+                color: isLocked ? Colors.grey : const Color(0xFF1F2937),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _deleteEntry(int index) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Row(
-          children: [
-            Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 28),
-            SizedBox(width: 12),
-            Text("Delete Memory?"),
-          ],
-        ),
-        content: const Text(
-          "This memory will be permanently deleted. This action cannot be undone.",
-          style: TextStyle(color: Color(0xFF6B7280), fontSize: 15),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel", style: TextStyle(fontSize: 16)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
-            onPressed: () async {
-              setState(() => _entries.removeAt(index));
-              await _saveEntries();
-              Navigator.pop(context);
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Row(
-                      children: [
-                        Icon(Icons.info_outline_rounded, color: Colors.white),
-                        SizedBox(width: 12),
-                        Text("Memory deleted"),
-                      ],
-                    ),
-                    backgroundColor: const Color(0xFF6B7280),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    margin: const EdgeInsets.all(16),
-                  ),
-                );
-              }
-            },
-            child: const Text("Delete", style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
       ),
     );
   }
@@ -594,7 +769,6 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image Preview
             if (entry.imagePath != null)
               Stack(
                 children: [
@@ -669,8 +843,6 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Audio Player
                   if (entry.audioPath != null)
                     Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -725,8 +897,6 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                         ],
                       ),
                     ),
-
-                  // Date & Time Tags
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -779,6 +949,31 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                           ],
                         ),
                       ),
+                      if ((entry.imagePath != null || entry.audioPath != null) && _hasAccess('premium'))
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFD4B5E8), Color(0xFFA78BFA)],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.star_rounded, size: 14, color: Colors.white),
+                              SizedBox(width: 6),
+                              Text(
+                                "Premium",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ],
@@ -786,6 +981,64 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _deleteEntry(int index) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 28),
+            SizedBox(width: 12),
+            Text("Delete Memory?"),
+          ],
+        ),
+        content: const Text(
+          "This memory will be permanently deleted. This action cannot be undone.",
+          style: TextStyle(color: Color(0xFF6B7280), fontSize: 15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel", style: TextStyle(fontSize: 16)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            onPressed: () async {
+              setState(() => _entries.removeAt(index));
+              await _saveEntries();
+              Navigator.pop(context);
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded, color: Colors.white),
+                        SizedBox(width: 12),
+                        Text("Memory deleted"),
+                      ],
+                    ),
+                    backgroundColor: const Color(0xFF6B7280),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    margin: const EdgeInsets.all(16),
+                  ),
+                );
+              }
+            },
+            child: const Text("Delete", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
@@ -831,11 +1084,11 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                           child: const Icon(Icons.auto_stories_rounded, color: Colors.white, size: 32),
                         ),
                         const SizedBox(width: 16),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
+                              const Text(
                                 'Love Journal',
                                 style: TextStyle(
                                   color: Colors.white,
@@ -844,12 +1097,29 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                                   letterSpacing: -0.5,
                                 ),
                               ),
-                              SizedBox(height: 4),
+                              const SizedBox(height: 4),
                               Text(
-                                'Your precious moments, encrypted & safe',
-                                style: TextStyle(color: Colors.white70, fontSize: 14),
+                                _hasAccess('premium')
+                                    ? 'Your precious moments with photos & voice'
+                                    : 'Free: Text entries only',
+                                style: const TextStyle(color: Colors.white70, fontSize: 14),
                               ),
                             ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.25),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _currentUserPlan.toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
@@ -866,7 +1136,11 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                         children: [
                           _buildStatItem(Icons.favorite_rounded, _entries.length.toString(), "Memories"),
                           Container(width: 1, height: 35, color: Colors.white.withOpacity(0.3)),
-                          _buildStatItem(Icons.lock_rounded, "Secure", "Encrypted"),
+                          _buildStatItem(
+                              _hasAccess('premium') ? Icons.photo_library_rounded : Icons.text_fields_rounded,
+                              _hasAccess('premium') ? "Premium" : "Free",
+                              _hasAccess('premium') ? "Photos & Voice" : "Text Only"
+                          ),
                         ],
                       ),
                     ),
@@ -874,78 +1148,174 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                 ),
               ),
             ),
+
+            // NEW: View All Entries Button
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: GestureDetector(
-                  onTap: _addEntryDialog,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 20),
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: primaryLavender.withOpacity(0.08),
-                          blurRadius: 25,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 70,
-                          height: 70,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [primaryLavender, accentLavender],
+                child: Column(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const JournalEntriesViewScreen(),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 12, bottom: 12),
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [accentLavender, primaryLavender],
+                          ),
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: primaryLavender.withOpacity(0.3),
+                              blurRadius: 15,
+                              offset: const Offset(0, 8),
                             ),
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: primaryLavender.withOpacity(0.3),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(Icons.add_rounded, color: Colors.white, size: 36),
+                          ],
                         ),
-                        const SizedBox(width: 20),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Create New Memory',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1F2937),
-                                  letterSpacing: -0.3,
-                                ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.25),
+                                borderRadius: BorderRadius.circular(16),
                               ),
-                              SizedBox(height: 4),
-                              Text(
-                                'Add text, photos, or voice notes',
-                                style: TextStyle(fontSize: 14, color: Color(0xFF9CA3AF)),
+                              child: const Icon(
+                                Icons.library_books,
+                                color: Colors.white,
+                                size: 30,
                               ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: 16),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'View All Memories',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Browse & export your journal',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.download,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ],
                         ),
-                        const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFFD1D5DB), size: 20),
-                      ],
+                      ),
                     ),
-                  ),
+
+                    // Create New Memory Button
+                    GestureDetector(
+                      onTap: _addEntryDialog,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: primaryLavender.withOpacity(0.08),
+                              blurRadius: 25,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 70,
+                              height: 70,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [primaryLavender, accentLavender],
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: primaryLavender.withOpacity(0.3),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(Icons.add_rounded, color: Colors.white, size: 36),
+                            ),
+                            const SizedBox(width: 20),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Create New Memory',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF1F2937),
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _hasAccess('premium')
+                                        ? 'Add text, photos, or voice notes'
+                                        : 'Free: Text entries only',
+                                    style: const TextStyle(fontSize: 14, color: Color(0xFF9CA3AF)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFFD1D5DB), size: 20),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
 
-            // Section Header
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -985,7 +1355,6 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
 
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
-            // Empty State or Entries List
             if (_entries.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
@@ -1022,18 +1391,38 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
                         ),
                       ),
                       const SizedBox(height: 12),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 40),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 40),
                         child: Text(
-                          "Start capturing your precious moments with text, photos, and voice notes",
+                          _hasAccess('premium')
+                              ? "Start capturing your precious moments with text, photos, and voice notes"
+                              : "Free plan supports text-only entries. Upgrade for photos and voice notes",
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 16,
                             color: Color(0xFF9CA3AF),
                             height: 1.5,
                           ),
                         ),
                       ),
+                      if (!_hasAccess('premium')) ...[
+                        const SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const SubscriptionPlansScreen()),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD4B5E8),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Upgrade for Photos & Voice'),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -1082,7 +1471,6 @@ class _JournalScreenState extends State<JournalScreen> with SingleTickerProvider
   }
 }
 
-// Journal Entry Model
 class JournalEntry {
   final String id;
   final String title;
